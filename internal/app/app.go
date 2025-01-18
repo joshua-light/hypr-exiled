@@ -18,6 +18,13 @@ import (
 	"poe-helper/pkg/logger"
 )
 
+type TradeEntry struct {
+	Timestamp   time.Time
+	TriggerType string
+	PlayerName  string
+	Message     string
+}
+
 type POEHelper struct {
 	config           *Config
 	window           fyne.Window
@@ -31,6 +38,10 @@ type POEHelper struct {
 	windowFoundTime  time.Time
 	sessionStartTime time.Time
 	foundSession     bool
+
+	// Trade entries
+	tradeEntries     []TradeEntry
+	entriesContainer *fyne.Container
 
 	// UI elements
 	status     *widget.Label
@@ -92,14 +103,16 @@ func NewPOEHelper(config *Config, log *logger.Logger, debug bool) (*POEHelper, e
 		log.Info("Using Hyprland window manager")
 	}
 
-	return &POEHelper{
+	helper := &POEHelper{
 		config:    config,
 		wm:        windowManager,
 		log:       log,
 		hasGame:   false,
 		ready:     false,
 		debugMode: debug,
-	}, nil
+	}
+
+	return helper, nil
 }
 
 func (p *POEHelper) Run() error {
@@ -202,51 +215,47 @@ func (p *POEHelper) initializeMainUI() {
 
 	// Create UI components
 	p.status = widget.NewLabel("Monitoring POE2...")
-	p.logEntries = widget.NewTextGrid()
+	p.entriesContainer = container.NewVBox()
+	scrollContainer := container.NewScroll(p.entriesContainer)
 
 	// Create debug panel if in debug mode
+	var bottomButtons *fyne.Container
+
 	if p.debugMode {
-		p.debugPanel = NewDebugPanel(p.window)
-
-		// Add debug logging
-		debugWriter := NewMemoryLogWriter(p.debugPanel)
+		// Now we have a valid window to pass
+		p.debugPanel = NewDebugPanel(p.window, p.log)
+		debugWriter := NewMemoryLogWriter(p.debugPanel, p.log)
 		p.log.AddWriter(debugWriter)
-	}
 
-	// Create buttons for commands
-	buttons := container.NewHBox()
-	for cmdName, cmdTemplate := range p.config.Commands {
-		cmd := cmdTemplate // Local copy for closure
-		btn := widget.NewButton(cmdName, func() {
-			if err := p.executeCommand(cmd); err != nil {
-				p.log.Error("Failed to execute command", err,
-					"command", cmd,
-				)
+		// Add a test log to verify the pipeline
+		p.log.Debug("Testing debug panel logging pipeline")
+
+		debugBtn := widget.NewButton("Debug", func() {
+			if !p.debugPanel.IsVisible() {
+				p.debugPanel.Show()
 			}
 		})
-		buttons.Add(btn)
+		bottomButtons = container.NewHBox(debugBtn)
 	}
 
-	// Add debug button if in debug mode
-	if p.debugMode {
-		debugBtn := widget.NewButton("Debug Logs", func() {
-			p.debugPanel.Show()
-		})
-		buttons.Add(debugBtn)
-	}
-
-	// Create main layout
-	content := container.NewBorder(
-		p.status,
-		buttons,
-		nil,
-		nil,
-		container.NewScroll(p.logEntries),
+	// Create main layout with padding
+	content := container.NewPadded(
+		container.NewBorder(
+			p.status,
+			bottomButtons,
+			nil,
+			nil,
+			scrollContainer,
+		),
 	)
 
 	p.window.SetContent(content)
 	p.window.Resize(fyne.NewSize(600, 400))
 
+	// Add initial debug log
+	p.log.Debug("Main UI initialized",
+		"container_nil", p.entriesContainer == nil,
+	)
 	// Start log watching
 	go p.watchLog()
 }
@@ -393,15 +402,14 @@ func (p *POEHelper) shouldProcessLine(line string) bool {
 }
 
 func (p *POEHelper) processLogLine(line string) {
-	// Extract timestamp from the log line
-	// Example format: "2025/01/18 15:18:11 335363 daa6b547 [INFO Client 292]"
+	// Initial timestamp validation
 	timestamp, err := time.Parse("2006/01/02 15:04:05", line[:19])
 	if err != nil {
 		p.log.Debug("Failed to parse timestamp from line", "line", line, "error", err)
 		return
 	}
 
-	// Skip lines that are before the window was found
+	// Window time validation with proper locking
 	p.mu.RLock()
 	windowTime := p.windowFoundTime
 	p.mu.RUnlock()
@@ -415,13 +423,10 @@ func (p *POEHelper) processLogLine(line string) {
 	}
 
 	p.log.Debug("Processing line", "line", line)
-	p.log.Debug("Current triggers", "triggers", p.config.CompiledTriggers)
 
+	// Process trade messages
 	for triggerName, re := range p.config.CompiledTriggers {
-		p.log.Debug("Trying trigger", "name", triggerName, "pattern", re.String())
 		matches := re.FindStringSubmatch(line)
-		p.log.Debug("Match result", "matches", matches, "length", len(matches))
-
 		if len(matches) > 1 {
 			playerName := matches[1]
 			p.log.Info("Triggered event",
@@ -430,47 +435,123 @@ func (p *POEHelper) processLogLine(line string) {
 				"line", line,
 			)
 
-			p.addLogEntry(fmt.Sprintf("[%s] %s: %s",
-				time.Now().Format("15:04:05"),
-				triggerName,
-				playerName,
-			))
+			// Create the trade entry
+			entry := TradeEntry{
+				Timestamp:   timestamp, // Use the parsed timestamp from the log
+				TriggerType: triggerName,
+				PlayerName:  playerName,
+				Message:     line,
+			}
 
-			// Update UI asynchronously
-			go func(cmd string) {
-				if cmd, ok := p.config.Commands[triggerName]; ok {
-					cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", playerName)
-					if err := p.executeCommand(cmdWithPlayer); err != nil {
-						p.log.Error("Failed to execute command", err,
-							"command", cmdWithPlayer,
-							"trigger", triggerName,
-							"player", playerName,
-						)
+			// Since we're running in a goroutine from watchLog(),
+			// we need to safely update the UI
+			if p.window != nil {
+				// Create UI elements for this trade
+				messageLabel := widget.NewLabel(fmt.Sprintf("[%s] %s: %s",
+					entry.Timestamp.Format("15:04:05"),
+					entry.TriggerType,
+					entry.PlayerName,
+				))
+
+				// Create action buttons
+				tradeBtn := widget.NewButton("trade", func() {
+					if cmd, ok := p.config.Commands["trade"]; ok {
+						cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", entry.PlayerName)
+						p.executeCommand(cmdWithPlayer)
 					}
+				})
+
+				inviteBtn := widget.NewButton("invite", func() {
+					if cmd, ok := p.config.Commands["invite"]; ok {
+						cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", entry.PlayerName)
+						p.executeCommand(cmdWithPlayer)
+					}
+				})
+
+				thankBtn := widget.NewButton("thank", func() {
+					if cmd, ok := p.config.Commands["thank"]; ok {
+						cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", entry.PlayerName)
+						p.executeCommand(cmdWithPlayer)
+					}
+				})
+
+				buttonBox := container.NewHBox(tradeBtn, inviteBtn, thankBtn)
+				entryBox := container.NewVBox(messageLabel, buttonBox)
+
+				p.mu.Lock()
+
+				if p.entriesContainer != nil {
+					p.entriesContainer.Add(entryBox)
+					p.window.Canvas().Refresh(p.entriesContainer)
 				}
-			}(triggerName)
+				p.mu.Unlock()
+			}
 		}
 	}
 }
 
-func (p *POEHelper) addLogEntry(entry string) {
+func (p *POEHelper) addLogEntry(entry TradeEntry) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.log.Debug("Adding log entry", "entry", entry, "textgrid_nil", p.logEntries == nil)
+	p.log.Debug("Adding trade entry",
+		"player", entry.PlayerName,
+		"container_nil", p.entriesContainer == nil,
+	)
 
-	if p.logEntries == nil {
+	if p.entriesContainer == nil {
+		p.log.Error("Entries container is nil", fmt.Errorf("container not initialized"))
 		return
 	}
 
-	// Get current text
-	currentText := p.logEntries.Text()
+	p.tradeEntries = append(p.tradeEntries, entry)
 
-	// Create new text with the new entry at the top
-	newText := entry + "\n" + currentText
+	// Create entry container with message and buttons
+	messageLabel := widget.NewLabel(fmt.Sprintf("[%s] %s: %s",
+		entry.Timestamp.Format("15:04:05"),
+		entry.TriggerType,
+		entry.PlayerName,
+	))
 
-	// Update the TextGrid
-	p.logEntries.SetText(newText)
+	// Create buttons for this specific trade
+	tradeBtn := widget.NewButton("trade", func() {
+		p.log.Debug("Trade button clicked", "player", entry.PlayerName)
+		if cmd, ok := p.config.Commands["trade"]; ok {
+			cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", entry.PlayerName)
+			p.executeCommand(cmdWithPlayer)
+		}
+	})
+
+	inviteBtn := widget.NewButton("invite", func() {
+		p.log.Debug("Invite button clicked", "player", entry.PlayerName)
+		if cmd, ok := p.config.Commands["invite"]; ok {
+			cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", entry.PlayerName)
+			p.executeCommand(cmdWithPlayer)
+		}
+	})
+
+	thankBtn := widget.NewButton("thank", func() {
+		p.log.Debug("Thank button clicked", "player", entry.PlayerName)
+		if cmd, ok := p.config.Commands["thank"]; ok {
+			cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", entry.PlayerName)
+			p.executeCommand(cmdWithPlayer)
+		}
+	})
+
+	buttonBox := container.NewHBox(tradeBtn, inviteBtn, thankBtn)
+	entryBox := container.NewVBox(
+		messageLabel,
+		buttonBox,
+	)
+
+	// Make sure the entry is visible
+	entryBox.Resize(fyne.NewSize(580, 80))
+
+	p.log.Debug("Adding new entry to container")
+
+	// Use Fyne's Refresh() to ensure the UI updates
+	p.entriesContainer.Add(entryBox)
+	p.entriesContainer.Refresh()
 }
 
 func (p *POEHelper) executeCommand(cmd string) error {
