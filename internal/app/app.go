@@ -19,15 +19,18 @@ import (
 )
 
 type POEHelper struct {
-	config     *Config
-	window     fyne.Window
-	wm         wm.WindowManager
-	log        *logger.Logger
-	poeWindow  wm.Window
-	hasGame    bool
-	ready      bool
-	debugPanel *DebugPanel
-	debugMode  bool
+	config           *Config
+	window           fyne.Window
+	wm               wm.WindowManager
+	log              *logger.Logger
+	poeWindow        wm.Window
+	hasGame          bool
+	ready            bool
+	debugPanel       *DebugPanel
+	debugMode        bool
+	windowFoundTime  time.Time
+	sessionStartTime time.Time
+	foundSession     bool
 
 	// UI elements
 	status     *widget.Label
@@ -148,6 +151,11 @@ func (p *POEHelper) detectGame() {
 			p.log.Error("Error detecting game window", err)
 		} else if window != (wm.Window{}) {
 			p.mu.Lock()
+			if !p.hasGame {
+				// Record timestamp when window is first found
+				p.windowFoundTime = time.Now()
+				p.foundSession = false // Reset session detection
+			}
 			p.poeWindow = window
 			p.hasGame = true
 			p.mu.Unlock()
@@ -157,6 +165,7 @@ func (p *POEHelper) detectGame() {
 				p.log.Info("Found POE2 window",
 					"class", window.Class,
 					"title", window.Title,
+					"time", p.windowFoundTime,
 				)
 
 				// Initialize main UI if not ready
@@ -170,7 +179,9 @@ func (p *POEHelper) detectGame() {
 			p.mu.Lock()
 			wasRunning := p.hasGame
 			p.hasGame = false
-			windowFound = false // Reset the window found flag
+			windowFound = false
+			p.windowFoundTime = time.Time{}
+			p.foundSession = false
 			p.mu.Unlock()
 
 			if wasRunning {
@@ -178,11 +189,10 @@ func (p *POEHelper) detectGame() {
 			}
 		}
 
-		// Always keep checking, but with different intervals
 		if p.hasGame {
-			time.Sleep(5 * time.Second) // Longer interval when window is present
+			time.Sleep(5 * time.Second)
 		} else {
-			time.Sleep(2 * time.Second) // Shorter interval when looking for window
+			time.Sleep(2 * time.Second)
 		}
 	}
 }
@@ -244,9 +254,22 @@ func (p *POEHelper) initializeMainUI() {
 func (p *POEHelper) watchLog() {
 	p.log.Info("Starting log watcher", "path", p.config.LogPath)
 
-	lastSize := int64(0)
+	// Get initial file size
+	stat, err := os.Stat(p.config.LogPath)
+	if err != nil {
+		p.log.Error("Failed to stat log file", err)
+		return
+	}
+
+	// Start from the end of the file
+	lastSize := stat.Size()
 	var lastError error
 	var lastErrorTime time.Time
+
+	p.log.Debug("Starting log watch from offset",
+		"size", lastSize,
+		"path", p.config.LogPath,
+	)
 
 	for {
 		p.mu.RLock()
@@ -258,7 +281,6 @@ func (p *POEHelper) watchLog() {
 
 		stat, err := os.Stat(p.config.LogPath)
 		if err != nil {
-			// Only log error if it's new or if it's been a while since last error
 			if lastError == nil || err.Error() != lastError.Error() ||
 				time.Since(lastErrorTime) > time.Minute {
 				p.log.Error("Failed to stat log file", err)
@@ -269,6 +291,15 @@ func (p *POEHelper) watchLog() {
 			continue
 		}
 
+		// If file is truncated or rotated, reset to beginning
+		if stat.Size() < lastSize {
+			p.log.Info("Log file was truncated, resetting position",
+				"old_size", lastSize,
+				"new_size", stat.Size(),
+			)
+			lastSize = 0
+		}
+
 		if stat.Size() > lastSize {
 			file, err := os.Open(p.config.LogPath)
 			if err != nil {
@@ -277,6 +308,7 @@ func (p *POEHelper) watchLog() {
 				continue
 			}
 
+			// Seek to last read position
 			if lastSize > 0 {
 				_, err = file.Seek(lastSize, 0)
 				if err != nil {
@@ -290,8 +322,25 @@ func (p *POEHelper) watchLog() {
 			scanner := bufio.NewScanner(file)
 			for scanner.Scan() {
 				line := scanner.Text()
-				p.processLogLine(line)
-				newLines = append(newLines, line)
+				// Extract timestamp from the log line
+				timestamp, err := time.Parse("2006/01/02 15:04:05", line[:19])
+				if err != nil {
+					p.log.Debug("Failed to parse timestamp from line",
+						"line", line,
+						"error", err,
+					)
+					continue
+				}
+
+				p.mu.RLock()
+				windowTime := p.windowFoundTime
+				p.mu.RUnlock()
+
+				// Only process lines that occurred after we found the window
+				if !windowTime.IsZero() && timestamp.After(windowTime) {
+					p.processLogLine(line)
+					newLines = append(newLines, line)
+				}
 			}
 
 			file.Close()
@@ -309,10 +358,65 @@ func (p *POEHelper) watchLog() {
 	}
 }
 
-func (p *POEHelper) processLogLine(line string) {
-	p.log.Debug("Processing line", "line", line)
+func (p *POEHelper) shouldProcessLine(line string) bool {
+	// Extract timestamp from the log line
+	timestamp, err := time.Parse("2006/01/02 15:04:05", line[:19])
+	if err != nil {
+		p.log.Debug("Failed to parse timestamp from line", "line", line, "error", err)
+		return false
+	}
 
+	p.mu.RLock()
+	windowTime := p.windowFoundTime
+	foundSession := p.foundSession
+	p.mu.RUnlock()
+
+	// If we haven't found the session start yet, look for it
+	if !foundSession {
+		if strings.Contains(line, "[STARTUP] Loading Start") && timestamp.After(windowTime) {
+			p.mu.Lock()
+			p.sessionStartTime = timestamp
+			p.foundSession = true
+			p.mu.Unlock()
+
+			p.log.Info("Found new POE session start",
+				"time", timestamp,
+				"window_found_time", windowTime,
+			)
+			return true
+		}
+		return false
+	}
+
+	// Only process lines after session start
+	return timestamp.After(p.sessionStartTime) || timestamp.Equal(p.sessionStartTime)
+}
+
+func (p *POEHelper) processLogLine(line string) {
+	// Extract timestamp from the log line
+	// Example format: "2025/01/18 15:18:11 335363 daa6b547 [INFO Client 292]"
+	timestamp, err := time.Parse("2006/01/02 15:04:05", line[:19])
+	if err != nil {
+		p.log.Debug("Failed to parse timestamp from line", "line", line, "error", err)
+		return
+	}
+
+	// Skip lines that are before the window was found
+	p.mu.RLock()
+	windowTime := p.windowFoundTime
+	p.mu.RUnlock()
+
+	if !windowTime.IsZero() && timestamp.Before(windowTime) {
+		p.log.Debug("Skipping old log line",
+			"line_time", timestamp,
+			"window_time", windowTime,
+		)
+		return
+	}
+
+	p.log.Debug("Processing line", "line", line)
 	p.log.Debug("Current triggers", "triggers", p.config.CompiledTriggers)
+
 	for triggerName, re := range p.config.CompiledTriggers {
 		p.log.Debug("Trying trigger", "name", triggerName, "pattern", re.String())
 		matches := re.FindStringSubmatch(line)
