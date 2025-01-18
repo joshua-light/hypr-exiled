@@ -224,12 +224,6 @@ func (p *POEHelper) initializeMainUI() {
 	if p.debugMode {
 		// Now we have a valid window to pass
 		p.debugPanel = NewDebugPanel(p.window, p.log)
-		debugWriter := NewMemoryLogWriter(p.debugPanel, p.log)
-		p.log.AddWriter(debugWriter)
-
-		// Add a test log to verify the pipeline
-		p.log.Debug("Testing debug panel logging pipeline")
-
 		debugBtn := widget.NewButton("Debug", func() {
 			if !p.debugPanel.IsVisible() {
 				p.debugPanel.Show()
