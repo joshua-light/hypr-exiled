@@ -1,22 +1,19 @@
 package input
 
 import (
-	"os/exec"
-	"time"
+	"github.com/go-vgo/robotgo"
 )
 
+// ExecuteInput simulates typing a command and pressing Enter before and after.
 func ExecuteInput(cmd string) error {
-	if err := exec.Command("wtype", "Return").Run(); err != nil {
-		return err
-	}
+	// Simulate pressing the Enter key
+	robotgo.KeyTap("enter")
 
-	time.Sleep(50 * time.Millisecond)
+	// Type the command
+	robotgo.TypeStr(cmd)
 
-	if err := exec.Command("wtype", cmd).Run(); err != nil {
-		return err
-	}
+	// Simulate pressing the Enter key again
+	robotgo.KeyTap("enter")
 
-	time.Sleep(50 * time.Millisecond)
-
-	return exec.Command("wtype", "Return").Run()
+	return nil
 }

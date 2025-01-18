@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 type Hyprland struct{}
@@ -60,5 +61,7 @@ func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, err
 }
 
 func (h *Hyprland) FocusWindow(w Window) error {
-	return exec.Command("hyprctl", "dispatch", "focuswindow", "address:"+w.Address).Run()
+	exec.Command("hyprctl", "dispatch", "focuswindow", "address:"+w.Address).Run()
+	time.Sleep(100 * time.Millisecond)
+	return nil
 }
