@@ -47,14 +47,19 @@ func main() {
 	defer log.Close()
 
 	// Create and run application
-	config := &app.Config{}
+	var config *app.Config
 	if *configPath != "" {
+		config = &app.Config{}
 		if err := config.LoadFromFile(*configPath); err != nil {
 			log.Fatal("Failed to load config", err)
 		}
+	} else {
+		config = app.DefaultConfig() // Use default config if no file provided
+		log.Info("Using default configuration")
 	}
 
 	app, err := app.NewPOEHelper(config, log, *debug)
+
 	if err != nil {
 		log.Fatal("Failed to create POE Helper", err)
 	}

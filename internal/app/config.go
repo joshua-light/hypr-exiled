@@ -42,8 +42,7 @@ func DefaultConfig() *Config {
 	config := &Config{
 		LogPath: "", // Will be set based on OS
 		Triggers: map[string]string{
-			"trade": "@From <([^>]+)>.*would like to buy",
-			"party": "@From <([^>]+)>.*join party",
+			"trade": `.*@From ([^:]+):.*would like to buy`,
 		},
 		Commands: map[string]string{
 			"trade":  "@trade {player}",

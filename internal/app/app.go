@@ -129,6 +129,8 @@ func (p *POEHelper) showWaitingScreen() {
 
 func (p *POEHelper) detectGame() {
 	p.log.Debug("Starting game detection loop")
+	windowFound := false
+
 	for {
 		p.mu.RLock()
 		if p.window == nil {
@@ -150,20 +152,25 @@ func (p *POEHelper) detectGame() {
 			p.hasGame = true
 			p.mu.Unlock()
 
-			p.log.Info("Found POE2 window",
-				"class", window.Class,
-				"title", window.Title,
-			)
+			// Only log and initialize UI on initial window discovery
+			if !windowFound {
+				p.log.Info("Found POE2 window",
+					"class", window.Class,
+					"title", window.Title,
+				)
 
-			// Initialize main UI if not ready
-			if !p.ready {
-				p.initializeMainUI()
-				p.ready = true
+				// Initialize main UI if not ready
+				if !p.ready {
+					p.initializeMainUI()
+					p.ready = true
+				}
+				windowFound = true
 			}
 		} else {
 			p.mu.Lock()
 			wasRunning := p.hasGame
 			p.hasGame = false
+			windowFound = false // Reset the window found flag
 			p.mu.Unlock()
 
 			if wasRunning {
@@ -171,7 +178,12 @@ func (p *POEHelper) detectGame() {
 			}
 		}
 
-		time.Sleep(2 * time.Second)
+		// Always keep checking, but with different intervals
+		if p.hasGame {
+			time.Sleep(5 * time.Second) // Longer interval when window is present
+		} else {
+			time.Sleep(2 * time.Second) // Shorter interval when looking for window
+		}
 	}
 }
 
@@ -298,8 +310,15 @@ func (p *POEHelper) watchLog() {
 }
 
 func (p *POEHelper) processLogLine(line string) {
+	p.log.Debug("Processing line", "line", line)
+
+	p.log.Debug("Current triggers", "triggers", p.config.CompiledTriggers)
 	for triggerName, re := range p.config.CompiledTriggers {
-		if matches := re.FindStringSubmatch(line); len(matches) > 1 {
+		p.log.Debug("Trying trigger", "name", triggerName, "pattern", re.String())
+		matches := re.FindStringSubmatch(line)
+		p.log.Debug("Match result", "matches", matches, "length", len(matches))
+
+		if len(matches) > 1 {
 			playerName := matches[1]
 			p.log.Info("Triggered event",
 				"trigger", triggerName,
@@ -333,6 +352,8 @@ func (p *POEHelper) processLogLine(line string) {
 func (p *POEHelper) addLogEntry(entry string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	p.log.Debug("Adding log entry", "entry", entry, "textgrid_nil", p.logEntries == nil)
 
 	if p.logEntries == nil {
 		return
