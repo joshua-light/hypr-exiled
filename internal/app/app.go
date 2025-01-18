@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +13,8 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 	"poe-helper/internal/input"
+	"poe-helper/internal/models"
+	"poe-helper/internal/poe_log"
 	"poe-helper/internal/wm"
 	"poe-helper/pkg/logger"
 )
@@ -211,7 +212,10 @@ func (p *POEHelper) detectGame() {
 }
 
 func (p *POEHelper) initializeMainUI() {
-	p.log.Debug("Initializing main UI")
+	p.log.Debug("Initializing main UI",
+		"log_path", p.config.LogPath,
+		"triggers_count", len(p.config.CompiledTriggers),
+	)
 
 	// Create UI components
 	p.status = widget.NewLabel("Monitoring POE2...")
@@ -222,7 +226,6 @@ func (p *POEHelper) initializeMainUI() {
 	var bottomButtons *fyne.Container
 
 	if p.debugMode {
-		// Now we have a valid window to pass
 		p.debugPanel = NewDebugPanel(p.window, p.log)
 		debugBtn := widget.NewButton("Debug", func() {
 			if !p.debugPanel.IsVisible() {
@@ -246,242 +249,43 @@ func (p *POEHelper) initializeMainUI() {
 	p.window.SetContent(content)
 	p.window.Resize(fyne.NewSize(600, 400))
 
-	// Add initial debug log
-	p.log.Debug("Main UI initialized",
-		"container_nil", p.entriesContainer == nil,
-	)
-	// Start log watching
-	go p.watchLog()
-}
-
-func (p *POEHelper) watchLog() {
-	p.log.Info("Starting log watcher", "path", p.config.LogPath)
-
-	// Get initial file size
-	stat, err := os.Stat(p.config.LogPath)
-	if err != nil {
-		p.log.Error("Failed to stat log file", err)
-		return
-	}
-
-	// Start from the end of the file
-	lastSize := stat.Size()
-	var lastError error
-	var lastErrorTime time.Time
-
-	p.log.Debug("Starting log watch from offset",
-		"size", lastSize,
-		"path", p.config.LogPath,
-	)
-
-	for {
-		p.mu.RLock()
-		if p.window == nil {
-			p.mu.RUnlock()
-			return
-		}
-		p.mu.RUnlock()
-
-		stat, err := os.Stat(p.config.LogPath)
-		if err != nil {
-			if lastError == nil || err.Error() != lastError.Error() ||
-				time.Since(lastErrorTime) > time.Minute {
-				p.log.Error("Failed to stat log file", err)
-				lastError = err
-				lastErrorTime = time.Now()
-			}
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		// If file is truncated or rotated, reset to beginning
-		if stat.Size() < lastSize {
-			p.log.Info("Log file was truncated, resetting position",
-				"old_size", lastSize,
-				"new_size", stat.Size(),
-			)
-			lastSize = 0
-		}
-
-		if stat.Size() > lastSize {
-			file, err := os.Open(p.config.LogPath)
-			if err != nil {
-				p.log.Error("Failed to open log file", err)
-				time.Sleep(5 * time.Second)
-				continue
-			}
-
-			// Seek to last read position
-			if lastSize > 0 {
-				_, err = file.Seek(lastSize, 0)
-				if err != nil {
-					p.log.Error("Failed to seek in log file", err)
-					file.Close()
-					continue
-				}
-			}
-
-			newLines := make([]string, 0)
-			scanner := bufio.NewScanner(file)
-			for scanner.Scan() {
-				line := scanner.Text()
-				// Extract timestamp from the log line
-				timestamp, err := time.Parse("2006/01/02 15:04:05", line[:19])
-				if err != nil {
-					p.log.Debug("Failed to parse timestamp from line",
-						"line", line,
-						"error", err,
-					)
-					continue
-				}
-
-				p.mu.RLock()
-				windowTime := p.windowFoundTime
-				p.mu.RUnlock()
-
-				// Only process lines that occurred after we found the window
-				if !windowTime.IsZero() && timestamp.After(windowTime) {
-					p.processLogLine(line)
-					newLines = append(newLines, line)
-				}
-			}
-
-			file.Close()
-			lastSize = stat.Size()
-
-			if len(newLines) > 0 {
-				p.log.Debug("Processed new log lines",
-					"count", len(newLines),
-					"last_line", newLines[len(newLines)-1],
-				)
-			}
-		}
-
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-func (p *POEHelper) shouldProcessLine(line string) bool {
-	// Extract timestamp from the log line
-	timestamp, err := time.Parse("2006/01/02 15:04:05", line[:19])
-	if err != nil {
-		p.log.Debug("Failed to parse timestamp from line", "line", line, "error", err)
-		return false
-	}
-
-	p.mu.RLock()
-	windowTime := p.windowFoundTime
-	foundSession := p.foundSession
-	p.mu.RUnlock()
-
-	// If we haven't found the session start yet, look for it
-	if !foundSession {
-		if strings.Contains(line, "[STARTUP] Loading Start") && timestamp.After(windowTime) {
-			p.mu.Lock()
-			p.sessionStartTime = timestamp
-			p.foundSession = true
-			p.mu.Unlock()
-
-			p.log.Info("Found new POE session start",
-				"time", timestamp,
-				"window_found_time", windowTime,
-			)
-			return true
-		}
-		return false
-	}
-
-	// Only process lines after session start
-	return timestamp.After(p.sessionStartTime) || timestamp.Equal(p.sessionStartTime)
-}
-
-func (p *POEHelper) processLogLine(line string) {
-	// Initial timestamp validation
-	timestamp, err := time.Parse("2006/01/02 15:04:05", line[:19])
-	if err != nil {
-		p.log.Debug("Failed to parse timestamp from line", "line", line, "error", err)
-		return
-	}
-
-	// Window time validation with proper locking
-	p.mu.RLock()
-	windowTime := p.windowFoundTime
-	p.mu.RUnlock()
-
-	if !windowTime.IsZero() && timestamp.Before(windowTime) {
-		p.log.Debug("Skipping old log line",
-			"line_time", timestamp,
-			"window_time", windowTime,
+	// Log trigger details
+	for name, re := range p.config.CompiledTriggers {
+		p.log.Debug("Configured trigger",
+			"name", name,
+			"pattern", re.String(),
 		)
-		return
 	}
 
-	p.log.Debug("Processing line", "line", line)
-
-	// Process trade messages
-	for triggerName, re := range p.config.CompiledTriggers {
-		matches := re.FindStringSubmatch(line)
-		if len(matches) > 1 {
-			playerName := matches[1]
-			p.log.Info("Triggered event",
-				"trigger", triggerName,
-				"player", playerName,
-				"line", line,
-			)
-
-			// Create the trade entry
-			entry := TradeEntry{
-				Timestamp:   timestamp, // Use the parsed timestamp from the log
-				TriggerType: triggerName,
-				PlayerName:  playerName,
-				Message:     line,
-			}
-
-			// Since we're running in a goroutine from watchLog(),
-			// we need to safely update the UI
-			if p.window != nil {
-				// Create UI elements for this trade
-				messageLabel := widget.NewLabel(fmt.Sprintf("[%s] %s: %s",
-					entry.Timestamp.Format("15:04:05"),
-					entry.TriggerType,
-					entry.PlayerName,
-				))
-
-				// Create action buttons
-				tradeBtn := widget.NewButton("trade", func() {
-					if cmd, ok := p.config.Commands["trade"]; ok {
-						cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", entry.PlayerName)
-						p.executeCommand(cmdWithPlayer)
-					}
-				})
-
-				inviteBtn := widget.NewButton("invite", func() {
-					if cmd, ok := p.config.Commands["invite"]; ok {
-						cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", entry.PlayerName)
-						p.executeCommand(cmdWithPlayer)
-					}
-				})
-
-				thankBtn := widget.NewButton("thank", func() {
-					if cmd, ok := p.config.Commands["thank"]; ok {
-						cmdWithPlayer := strings.ReplaceAll(cmd, "{player}", entry.PlayerName)
-						p.executeCommand(cmdWithPlayer)
-					}
-				})
-
-				buttonBox := container.NewHBox(tradeBtn, inviteBtn, thankBtn)
-				entryBox := container.NewVBox(messageLabel, buttonBox)
-
-				p.mu.Lock()
-
-				if p.entriesContainer != nil {
-					p.entriesContainer.Add(entryBox)
-					p.window.Canvas().Refresh(p.entriesContainer)
-				}
-				p.mu.Unlock()
-			}
-		}
+	// Wrap the addLogEntry method to match the new signature
+	onTradeEntry := func(entry models.TradeEntry) {
+		p.log.Debug("Trade entry received",
+			"player", entry.PlayerName,
+			"trigger", entry.TriggerType,
+			"message", entry.Message,
+		)
+		p.addLogEntry(TradeEntry{
+			Timestamp:   entry.Timestamp,
+			TriggerType: entry.TriggerType,
+			PlayerName:  entry.PlayerName,
+			Message:     entry.Message,
+		})
 	}
+
+	logWatcher := poe_log.NewLogWatcher(
+		p.config.LogPath,
+		p.log,
+		p.windowFoundTime,
+		p.config.CompiledTriggers,
+		onTradeEntry,
+	)
+
+	p.log.Debug("Creating log watcher",
+		"log_path", p.config.LogPath,
+		"window_found_time", p.windowFoundTime,
+	)
+
+	go logWatcher.Watch()
 }
 
 func (p *POEHelper) addLogEntry(entry TradeEntry) {
