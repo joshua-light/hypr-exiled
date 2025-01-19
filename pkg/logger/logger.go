@@ -6,10 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
+)
+
+const (
+	DefaultLogDir  = "~/.local/share/poe-helper/logs"
+	DefaultLogFile = "debug.log"
 )
 
 type Logger struct {
@@ -20,30 +26,6 @@ type Logger struct {
 }
 
 type Option func(*Logger) error
-
-// WithFile sets up file logging
-func WithFile(path string) Option {
-	return func(l *Logger) error {
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			return fmt.Errorf("failed to create log directory: %w", err)
-		}
-
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return fmt.Errorf("failed to open log file: %w", err)
-		}
-
-		fileWriter := zerolog.ConsoleWriter{
-			Out:        f,
-			TimeFormat: time.RFC3339,
-			NoColor:    true,
-		}
-
-		l.file = f
-		l.zlog = l.zlog.Output(fileWriter)
-		return nil
-	}
-}
 
 // WithConsole enables console logging
 func WithConsole() Option {
@@ -65,12 +47,62 @@ func WithLevel(level zerolog.Level) Option {
 	}
 }
 
+// WithFile sets up file logging with an explicit path
+func WithFile(path string) Option {
+	return func(l *Logger) error {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return fmt.Errorf("failed to create log directory: %w", err)
+		}
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open log file: %w", err)
+		}
+		fileWriter := zerolog.ConsoleWriter{
+			Out:        f,
+			TimeFormat: time.RFC3339,
+			NoColor:    true,
+		}
+		l.file = f
+		l.zlog = l.zlog.Output(fileWriter)
+		return nil
+	}
+}
+
+// getDefaultLogPath returns the expanded default log path
+func getDefaultLogPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	logDir := strings.Replace(DefaultLogDir, "~", homeDir, 1)
+	return filepath.Join(logDir, DefaultLogFile), nil
+}
+
 // NewLogger creates a new logger with the given options
 func NewLogger(opts ...Option) (*Logger, error) {
 	logger := &Logger{
 		zlog: zerolog.New(os.Stderr).With().Timestamp().Logger(),
 	}
 
+	// If no file option is provided, use the default log path
+	hasFileOption := false
+	for _, opt := range opts {
+		if fmt.Sprintf("%p", opt) == fmt.Sprintf("%p", WithFile("")) {
+			hasFileOption = true
+			break
+		}
+	}
+
+	if !hasFileOption {
+		defaultPath, err := getDefaultLogPath()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get default log path: %w", err)
+		}
+		opts = append([]Option{WithFile(defaultPath)}, opts...)
+	}
+
+	// Apply all options
 	for _, opt := range opts {
 		if err := opt(logger); err != nil {
 			return nil, fmt.Errorf("failed to apply logger option: %w", err)
@@ -138,6 +170,7 @@ func (l *Logger) Fatal(msg string, err error, fields ...interface{}) {
 	event.Msg(msg)
 }
 
+// AddWriter adds a writer to the logger
 func (l *Logger) AddWriter(w io.Writer) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

@@ -1,5 +1,6 @@
 package wm
 
+// WindowManager interface defines the required methods for window managers
 type WindowManager interface {
 	// FindWindow looks for a window by class name or title
 	FindWindow(classNames []string, titles []string) (Window, error)
@@ -9,9 +10,15 @@ type WindowManager interface {
 	Name() string
 }
 
+// Window represents a window in the system
 type Window struct {
-	ID      string
+	ID      string // For X11
 	Class   string
 	Title   string
 	Address string // For Hyprland
+}
+
+// IsEmpty checks if the window is empty/not found
+func (w Window) IsEmpty() bool {
+	return w.ID == "" && w.Address == "" && w.Class == "" && w.Title == ""
 }

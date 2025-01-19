@@ -4,39 +4,35 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/rs/zerolog"
 	"poe-helper/internal/app"
 	"poe-helper/pkg/logger"
 )
 
+// TODO: Add inf logs about config being loaded and from where
 func main() {
 	// Parse command line flags
 	configPath := flag.String("config", "", "path to config file")
-	logPath := flag.String("log", "", "path to log file")
 	debug := flag.Bool("debug", false, "enable debug logging")
 	flag.Parse()
 
-	// Setup logging
+	// Setup logging level
 	logLevel := zerolog.InfoLevel
 	if *debug {
 		logLevel = zerolog.DebugLevel
 	}
 
-	// Determine log file path
-	if *logPath == "" {
-		userConfigDir, err := os.UserConfigDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to get config directory: %v\n", err)
-			os.Exit(1)
-		}
-		*logPath = filepath.Join(userConfigDir, "poe-helper", "poe-helper.log")
+	// Load configuration with priority order
+	config, err := app.FindConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get config directory: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Initialize logger
+	// Initialize logger with just console and level options
+	// It will use the default log path automatically
 	log, err := logger.NewLogger(
-		logger.WithFile(*logPath),
 		logger.WithConsole(),
 		logger.WithLevel(logLevel),
 	)
@@ -46,20 +42,7 @@ func main() {
 	}
 	defer log.Close()
 
-	// Create and run application
-	var config *app.Config
-	if *configPath != "" {
-		config = &app.Config{}
-		if err := config.LoadFromFile(*configPath); err != nil {
-			log.Fatal("Failed to load config", err)
-		}
-	} else {
-		config = app.DefaultConfig() // Use default config if no file provided
-		log.Info("Using default configuration")
-	}
-
-	app, err := app.NewPOEHelper(config, log, *debug)
-
+	app, err := app.NewPOEHelper(config, log)
 	if err != nil {
 		log.Fatal("Failed to create POE Helper", err)
 	}
