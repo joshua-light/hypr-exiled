@@ -15,10 +15,10 @@ var notificationTools = []notificationTool{
 		name: "dunstify",
 		buildCommand: func(tool string, message string, nType NotificationType) *exec.Cmd {
 			urgency := "normal"
-			title := "POE Helper Info"
+			title := "PoE"
 			if nType == Error {
 				urgency = "critical"
-				title = "POE Helper Error"
+				title = "PoE Error"
 			}
 			return exec.Command(tool, "-u", urgency, title, message)
 		},
@@ -52,11 +52,9 @@ func (n *NotifyService) trySystemNotification(message string, nType Notification
 		if _, err := exec.LookPath(tool.name); err == nil {
 			cmd := tool.buildCommand(tool.name, message, nType)
 			if err := cmd.Run(); err == nil {
-				if n.log != nil {
-					n.log.Debug("Notification sent successfully",
-						"tool", tool.name,
-						"type", nType)
-				}
+				n.log.Debug("Notification sent successfully",
+					"tool", tool.name,
+					"type", nType)
 				return nil
 			}
 		}

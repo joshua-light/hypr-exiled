@@ -3,17 +3,18 @@ package wm
 import (
 	"fmt"
 	"os"
-	"poe-helper/pkg/logger"
+	"poe-helper/pkg/global"
 )
 
 // Manager handles window management operations based on the session type
 type Manager struct {
-	wm  WindowManager
-	log *logger.Logger
+	wm WindowManager
 }
 
 // NewManager creates a new window manager based on the session type
-func NewManager(log *logger.Logger) (*Manager, error) {
+func NewManager() (*Manager, error) {
+	log := global.GetLogger()
+
 	// Check session type
 	sessionType := os.Getenv("XDG_SESSION_TYPE")
 	log.Info("Session type detected", "session", sessionType)
@@ -25,7 +26,7 @@ func NewManager(log *logger.Logger) (*Manager, error) {
 	case "wayland":
 		if sig := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"); sig != "" {
 			log.Debug("Initializing compositor support", "type", "Hyprland")
-			wm, err = NewHyprland(log)
+			wm, err = NewHyprland()
 			if err != nil {
 				return nil, fmt.Errorf("failed to initialize Hyprland support: %w", err)
 			}

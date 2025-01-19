@@ -36,7 +36,6 @@ func (n *NotifyService) Show(message string, nType NotificationType) error {
 		if err := n.executeNotifyCommand(message, nType); err == nil {
 			return nil
 		}
-		// Log failure of custom command
 		n.log.Warn("Custom notification command failed", "command", n.notifyCommand)
 	}
 
@@ -60,6 +59,8 @@ func (n *NotifyService) Show(message string, nType NotificationType) error {
 }
 
 func (n *NotifyService) executeNotifyCommand(message string, nType NotificationType) error {
+	n.log.Debug("executingNotifyhCommand", "notifyCommand", n.notifyCommand,
+		"nType", nType)
 	typeStr := "ERROR"
 	if nType == Info {
 		typeStr = "INFO"

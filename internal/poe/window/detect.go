@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"poe-helper/internal/wm"
-	"poe-helper/pkg/logger"
+	"poe-helper/pkg/global"
+	"poe-helper/pkg/notify"
 )
 
 // Detector handles POE window detection
 type Detector struct {
-	log                   *logger.Logger
 	poeHelperSessionStart time.Time
 	lastResetTimestamp    time.Time
 	windowFoundTime       time.Time
@@ -24,15 +24,16 @@ type Detector struct {
 }
 
 // NewDetector creates a new POE window detector
-func NewDetector(log *logger.Logger) *Detector {
-	manager, err := wm.NewManager(log)
+func NewDetector() *Detector {
+	log := global.GetLogger()
+
+	manager, err := wm.NewManager()
 	if err != nil {
 		log.Error("Failed to create window manager", err)
 		return nil
 	}
 
 	return &Detector{
-		log:                   log,
 		poeHelperSessionStart: time.Now(),
 		windowClasses:         []string{"pathofexile2", "steam_app_PATH_OF_EXILE_2_ID"},
 		windowTitles:          []string{"Path of Exile 2", "PoE 2"},
@@ -42,9 +43,12 @@ func NewDetector(log *logger.Logger) *Detector {
 
 // Detect checks for the PoE window
 func (d *Detector) Detect() error {
+	log := global.GetLogger()
+	notifier := global.GetNotifier()
+
 	window, err := d.wmManager.FindWindow(d.windowClasses, d.windowTitles)
 	if err != nil {
-		d.log.Error("Error detecting game window", err)
+		log.Error("Error detecting game window", err)
 		return err
 	}
 
@@ -57,11 +61,13 @@ func (d *Detector) Detect() error {
 	if isActive != d.isWindowActive {
 		if isActive {
 			d.windowFoundTime = time.Now()
-			d.log.Info("PoE window found",
+			log.Info("PoE window found",
 				"class", window.Class,
 				"title", window.Title)
+			notifier.Show("PoE window found, monitoring trades...", notify.Info)
 		} else {
-			d.log.Info("PoE window lost")
+			log.Info("PoE window lost")
+			notifier.Show("PoE window lost", notify.Info)
 		}
 		d.isWindowActive = isActive
 	}
@@ -71,19 +77,20 @@ func (d *Detector) Detect() error {
 
 // CheckLogLineValidity checks if a log line should be processed
 func (d *Detector) CheckLogLineValidity(lineTimestamp time.Time, line string) bool {
+	log := global.GetLogger()
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	// Check if window is active
 	if !d.isWindowActive {
-		d.log.Debug("Rejecting line - no active window",
+		log.Debug("Rejecting line - no active window",
 			"line_time", lineTimestamp)
 		return false
 	}
 
 	// If line is before app started, reject
 	if lineTimestamp.Before(d.poeHelperSessionStart) {
-		d.log.Debug("Rejecting line - before app start",
+		log.Debug("Rejecting line - before app start",
 			"line_time", lineTimestamp,
 			"app_start_time", d.poeHelperSessionStart)
 		return false
@@ -91,7 +98,7 @@ func (d *Detector) CheckLogLineValidity(lineTimestamp time.Time, line string) bo
 
 	// If line is before window was found, reject
 	if lineTimestamp.Before(d.windowFoundTime) {
-		d.log.Debug("Rejecting line - before window found",
+		log.Debug("Rejecting line - before window found",
 			"line_time", lineTimestamp,
 			"window_found_time", d.windowFoundTime)
 		return false
@@ -102,14 +109,14 @@ func (d *Detector) CheckLogLineValidity(lineTimestamp time.Time, line string) bo
 		// Update the last reset time to ensure only lines after this are processed
 		d.lastResetTimestamp = lineTimestamp
 
-		d.log.Info("Game restart detected",
+		log.Info("Game restart detected",
 			"timestamp", lineTimestamp)
 		return false
 	}
 
 	// If last reset timestamp exists, only process lines after it
 	if !d.lastResetTimestamp.IsZero() && lineTimestamp.Before(d.lastResetTimestamp) {
-		d.log.Debug("Rejecting line - before game restart",
+		log.Debug("Rejecting line - before game restart",
 			"line_time", lineTimestamp,
 			"restart_time", d.lastResetTimestamp)
 		return false
@@ -117,7 +124,7 @@ func (d *Detector) CheckLogLineValidity(lineTimestamp time.Time, line string) bo
 
 	// Only process lines with "@From" or "@To"
 	if !strings.Contains(line, "@From") && !strings.Contains(line, "@To") {
-		d.log.Debug("Rejecting line - not a trade message")
+		log.Debug("Rejecting line - not a trade message")
 		return false
 	}
 
@@ -126,6 +133,8 @@ func (d *Detector) CheckLogLineValidity(lineTimestamp time.Time, line string) bo
 
 // Start begins monitoring window state
 func (d *Detector) Start() error {
+	log := global.GetLogger()
+
 	if d.wmManager == nil {
 		return fmt.Errorf("window manager not initialized")
 	}
@@ -133,7 +142,7 @@ func (d *Detector) Start() error {
 	go func() {
 		for {
 			if err := d.Detect(); err != nil {
-				d.log.Error("Window detection error", err)
+				log.Error("Window detection error", err)
 			}
 			time.Sleep(2 * time.Second)
 		}

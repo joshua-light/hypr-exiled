@@ -4,35 +4,32 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"poe-helper/internal/models"
-	"poe-helper/internal/poe/window"
-	"poe-helper/pkg/logger"
 	"regexp"
 	"strings"
 	"time"
+
+	"poe-helper/internal/models"
+	"poe-helper/internal/poe/window"
+
+	"poe-helper/pkg/global"
 )
 
 var timestampRegex = regexp.MustCompile(`^\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}`)
 
 type LogWatcher struct {
-	poeLogPath  string
-	log         *logger.Logger
-	triggers    map[string]*regexp.Regexp
 	handler     func(models.TradeEntry)
 	windowCheck *window.Detector
 	stopChan    chan struct{}
 }
 
-func NewLogWatcher(poeLogPath string, log *logger.Logger, triggers map[string]*regexp.Regexp, handler func(models.TradeEntry)) (*LogWatcher, error) {
+func NewLogWatcher(handler func(models.TradeEntry)) (*LogWatcher, error) {
+	cfg, log, _ := global.GetAll()
 	log.Debug("Initializing new LogWatcher",
-		"path", poeLogPath,
-		"trigger_count", len(triggers))
+		"path", cfg.PoeLogPath,
+		"trigger_count", len(cfg.Triggers))
 
-	detector := window.NewDetector(log)
+	detector := window.NewDetector()
 	watcher := &LogWatcher{
-		poeLogPath:  poeLogPath,
-		log:         log,
-		triggers:    triggers,
 		handler:     handler,
 		windowCheck: detector,
 		stopChan:    make(chan struct{}),
@@ -48,11 +45,12 @@ func NewLogWatcher(poeLogPath string, log *logger.Logger, triggers map[string]*r
 }
 
 func (w *LogWatcher) Watch() error {
-	w.log.Info("Starting log watch routine", "path", w.poeLogPath)
+	cfg, log, _ := global.GetAll()
+	log.Info("Starting log watch routine", "path", cfg.PoeLogPath)
 
-	file, err := os.Open(w.poeLogPath)
+	file, err := os.Open(cfg.PoeLogPath)
 	if err != nil {
-		w.log.Error("Failed to open log file", err)
+		log.Error("Failed to open log file", err)
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
 	defer file.Close()
@@ -60,10 +58,10 @@ func (w *LogWatcher) Watch() error {
 	// Get initial file size
 	stat, _ := file.Stat()
 	initialSize := stat.Size()
-	w.log.Info("Initial file size", "size", initialSize)
+	log.Info("Initial file size", "size", initialSize)
 
 	// Instead of seeking to end immediately, we'll keep track of where we need to read from
-	var offset int64 = initialSize
+	var offset = initialSize
 	lastSize := initialSize
 
 	// Increase scanner buffer size to handle long lines
@@ -78,7 +76,7 @@ func (w *LogWatcher) Watch() error {
 			// Check current file size
 			stat, err := file.Stat()
 			if err != nil {
-				w.log.Error("Failed to stat file", err)
+				log.Error("Failed to stat file", err)
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
@@ -87,7 +85,7 @@ func (w *LogWatcher) Watch() error {
 
 			// Handle file truncation
 			if currentSize < lastSize {
-				w.log.Info("File was truncated, resetting",
+				log.Info("File was truncated, resetting",
 					"old_size", lastSize,
 					"new_size", currentSize)
 				offset = 0
@@ -98,7 +96,7 @@ func (w *LogWatcher) Watch() error {
 			if currentSize > offset {
 				// Seek to where we left off
 				if _, err := file.Seek(offset, 0); err != nil {
-					w.log.Error("Failed to seek file", err)
+					log.Error("Failed to seek file", err)
 					time.Sleep(500 * time.Millisecond)
 					continue
 				}
@@ -110,18 +108,18 @@ func (w *LogWatcher) Watch() error {
 				// Read all new lines
 				for scanner.Scan() {
 					line := scanner.Text()
-					w.log.Debug("Read new line",
+					log.Debug("Read new line",
 						"content", line[:min(len(line), 100)],
 						"length", len(line))
 
 					if err := w.processLogLine(line); err != nil {
-						w.log.Debug("Failed to process log line",
+						log.Debug("Failed to process log line",
 							"error", err)
 					}
 				}
 
 				if err := scanner.Err(); err != nil {
-					w.log.Error("Scanner error", err)
+					log.Error("Scanner error", err)
 					time.Sleep(500 * time.Millisecond)
 					continue
 				}
@@ -137,10 +135,19 @@ func (w *LogWatcher) Watch() error {
 }
 
 func (w *LogWatcher) processLogLine(line string) error {
+	cfg, log, _ := global.GetAll()
+
+	// Check if line starts with a valid timestamp
+	if !timestampRegex.MatchString(line) {
+		log.Debug("Rejecting line - invalid timestamp format",
+			"line", line)
+		return nil
+	}
+
 	// Parse timestamp
 	timestamp, err := w.parseTimestamp(line)
 	if err != nil {
-		w.log.Debug("Failed to parse timestamp",
+		log.Debug("Failed to parse timestamp",
 			"line", line,
 			"error", err)
 		return nil
@@ -152,11 +159,11 @@ func (w *LogWatcher) processLogLine(line string) error {
 	}
 
 	// Process trade messages
-	for triggerName, trigger := range w.triggers {
+	for triggerName, trigger := range cfg.CompiledTriggers {
 		matches := trigger.FindStringSubmatch(line)
 		if len(matches) > 1 {
 			playerName := matches[1]
-			w.log.Info("Triggered event",
+			log.Info("Triggered event",
 				"trigger", triggerName,
 				"player", playerName,
 				"line", line,
@@ -181,6 +188,7 @@ func (w *LogWatcher) processLogLine(line string) error {
 }
 
 func (w *LogWatcher) parseTimestamp(line string) (time.Time, error) {
+
 	parts := strings.SplitN(line, " ", 4)
 	if len(parts) < 4 {
 		return time.Time{}, fmt.Errorf("insufficient parts in line")
@@ -191,7 +199,9 @@ func (w *LogWatcher) parseTimestamp(line string) (time.Time, error) {
 }
 
 func (w *LogWatcher) Stop() {
-	w.log.Info("Stopping log watcher")
+	log := global.GetLogger()
+
+	log.Info("Stopping log watcher")
 	close(w.stopChan)
 	// w.windowCheck.Stop()
 }

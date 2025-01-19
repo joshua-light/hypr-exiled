@@ -4,18 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"poe-helper/pkg/logger"
 	"strings"
 	"time"
+
+	"poe-helper/pkg/global"
+	"poe-helper/pkg/notify"
 )
 
 type Hyprland struct {
-	log              *logger.Logger
 	hasLoggedWaiting bool
 	lastFoundWindow  Window
 }
 
-func NewHyprland(log *logger.Logger) (*Hyprland, error) {
+func NewHyprland() (*Hyprland, error) {
+	log := global.GetLogger()
+
 	// Check if hyprctl is available
 	path, err := exec.LookPath("hyprctl")
 	if err != nil {
@@ -24,7 +27,7 @@ func NewHyprland(log *logger.Logger) (*Hyprland, error) {
 	}
 	log.Debug("Found hyprctl", "path", path)
 
-	return &Hyprland{log: log}, nil
+	return &Hyprland{}, nil
 }
 
 func (h *Hyprland) Name() string {
@@ -32,11 +35,14 @@ func (h *Hyprland) Name() string {
 }
 
 func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, error) {
+	log := global.GetLogger()
+	notifier := global.GetNotifier()
+
 	// Create the command
 	cmd := exec.Command("hyprctl", "clients", "-j")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		h.log.Error("Failed to execute hyprctl", err, "output", string(output))
+		log.Error("Failed to execute hyprctl", err, "output", string(output))
 		return Window{}, fmt.Errorf("hyprctl error: %w", err)
 	}
 
@@ -51,7 +57,7 @@ func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, err
 	}
 
 	if err := json.Unmarshal(output, &windows); err != nil {
-		h.log.Error("Failed to parse hyprctl output", err, "output", string(output))
+		log.Error("Failed to parse hyprctl output", err, "output", string(output))
 		return Window{}, fmt.Errorf("failed to parse hyprctl output: %w", err)
 	}
 
@@ -68,7 +74,7 @@ func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, err
 
 				// Only log if this is a different window than last time
 				if foundWindow != h.lastFoundWindow {
-					h.log.Debug("Found matching window by class",
+					log.Debug("Found matching window by class",
 						"class", w.Class,
 						"title", w.Title,
 						"address", w.Address)
@@ -90,7 +96,7 @@ func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, err
 
 				// Only log if this is a different window than last time
 				if foundWindow != h.lastFoundWindow {
-					h.log.Debug("Found matching window by title",
+					log.Debug("Found matching window by title",
 						"class", w.Class,
 						"title", w.Title,
 						"address", w.Address)
@@ -109,7 +115,9 @@ func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, err
 	}
 
 	if !h.hasLoggedWaiting {
-		h.log.Info("Waiting for PoE 2...")
+		var message = "Waiting for PoE 2 Window..."
+		log.Info(message)
+		notifier.Show(message, notify.Info)
 		h.hasLoggedWaiting = true
 	}
 
@@ -117,11 +125,13 @@ func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, err
 }
 
 func (h *Hyprland) FocusWindow(w Window) error {
-	h.log.Debug("Focusing window", "address", w.Address)
+	log := global.GetLogger()
+
+	log.Debug("Focusing window", "address", w.Address)
 
 	cmd := exec.Command("hyprctl", "dispatch", "focuswindow", "address:"+w.Address)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		h.log.Error("Failed to focus window", err, "output", string(output))
+		log.Error("Failed to focus window", err, "output", string(output))
 		return fmt.Errorf("failed to focus window: %w", err)
 	}
 

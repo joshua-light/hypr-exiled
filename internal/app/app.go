@@ -5,117 +5,155 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"poe-helper/internal/models"
-	"poe-helper/internal/notify"
-	"poe-helper/internal/poe/log"
-	"poe-helper/pkg/logger"
 	"syscall"
+
+	"poe-helper/internal/models"
+	"poe-helper/internal/poe/log"
+	"poe-helper/pkg/global"
+	"poe-helper/pkg/notify"
 )
 
 type POEHelper struct {
-	config     *Config
-	log        *logger.Logger
-	entries    []models.TradeEntry
-	notifier   *notify.NotifyService
-	logWatcher *poe_log.LogWatcher
+	entries       []models.TradeEntry
+	poeLogWatcher *poe_log.LogWatcher
 }
 
-func NewPOEHelper(config *Config, log *logger.Logger) (*POEHelper, error) {
+func NewPOEHelper() (*POEHelper, error) {
+	log := global.GetLogger()
+	config := global.GetConfig()
+
+	log.Info("Creating new POE Helper instance")
 	log.Debug("Initializing POEHelper",
 		"log_path", config.PoeLogPath,
-		"notify_command", config.NotifyCommand)
+		"notify_command", config.NotifyCommand,
+		"trigger_count", len(config.CompiledTriggers))
 
 	if err := checkDependencies(); err != nil {
-		log.Error("Dependency check failed", err)
-		tempNotifier := notify.NewNotifyService("", log)
-		tempNotifier.Show(err.Error(), notify.Error)
+		log.Error("Dependency check failed", err,
+			"details", "Required dependencies not found")
+		global.GetNotifier().Show(err.Error(), notify.Error)
 		return nil, err
 	}
 
 	helper := &POEHelper{
-		config:   config,
-		log:      log,
-		entries:  make([]models.TradeEntry, 0),
-		notifier: notify.NewNotifyService(config.NotifyCommand, log),
+		entries: make([]models.TradeEntry, 0),
 	}
 
-	log.Debug("Initializing log watcher",
-		"trigger_count", len(config.CompiledTriggers))
-
+	log.Debug("Creating log watcher instance")
 	logWatcher, err := poe_log.NewLogWatcher(
-		config.PoeLogPath,
-		log,
-		config.CompiledTriggers,
 		helper.handleTradeEntry,
 	)
+
 	if err != nil {
-		log.Error("Failed to initialize log watcher", err)
+		log.Error("Log watcher initialization failed",
+			err,
+			"details", "Failed to create log watcher instance")
 		return nil, fmt.Errorf("failed to initialize log watcher: %w", err)
 	}
 
-	helper.logWatcher = logWatcher
-	log.Debug("POEHelper initialized successfully")
+	helper.poeLogWatcher = logWatcher
+	log.Info("POEHelper initialized successfully",
+		"watcher_status", "ready",
+		"entry_buffer_size", len(helper.entries))
 	return helper, nil
 }
 
 func checkDependencies() error {
+	log := global.GetLogger()
+
+	log.Info("Checking system dependencies")
 	if _, err := exec.LookPath("rofi"); err != nil {
+		log.Info("Dependency check failed",
+			"missing_dependency", "rofi",
+			"error", err)
 		return fmt.Errorf("rofi is not installed. Please install it using your package manager")
 	}
+	log.Info("All dependencies satisfied")
 	return nil
 }
 
 func (p *POEHelper) handleTradeEntry(entry models.TradeEntry) {
-	p.log.Info("Trade request received",
+	notifier := global.GetNotifier()
+	log := global.GetLogger()
+
+	log.Info("Trade request received",
 		"player", entry.PlayerName,
 		"type", entry.TriggerType,
 		"timestamp", entry.Timestamp,
-	)
+		"entry_count", len(p.entries))
 
-	p.log.Debug("Adding entry to history",
-		"current_count", len(p.entries))
+	log.Debug("Processing trade entry",
+		"current_entries", len(p.entries),
+		"new_entry_player", entry.PlayerName)
 	p.entries = append(p.entries, entry)
 
 	message := fmt.Sprintf("Trade request from %s", entry.PlayerName)
-	p.log.Debug("Showing notification", "message", message)
+	log.Debug("Preparing notification",
+		"message", message,
+		"type", "info")
 
-	if err := p.notifier.Show(message, notify.Info); err != nil {
-		p.log.Error("Failed to show trade notification",
+	if err := notifier.Show(message, notify.Info); err != nil {
+		log.Error("Notification failed",
 			err,
-			"player", entry.PlayerName)
+			"player", entry.PlayerName,
+			"message", message)
 	}
 }
 
 func (p *POEHelper) Run() error {
-	p.log.Debug("Starting POEHelper")
+	notifier := global.GetNotifier()
+	log := global.GetLogger()
 
-	if err := p.notifier.Show("POE Helper started. Monitoring for trade messages...", notify.Info); err != nil {
-		p.log.Error("Failed to show startup notification", err)
+	log.Info("Starting POE Helper service")
+	log.Debug("Initializing service components")
+
+	if err := notifier.Show("POE Helper started", notify.Info); err != nil {
+		log.Error("Startup notification failed",
+			err,
+			"notification_type", "startup")
 	}
 
 	go func() {
-		p.log.Debug("Starting log watcher routine")
-		if err := p.logWatcher.Watch(); err != nil {
-			p.log.Error("Log watcher error", err)
-			p.notifier.Show(fmt.Sprintf("Log watcher error: %v", err), notify.Error)
+		if err := p.poeLogWatcher.Watch(); err != nil {
+			log.Error("Log watcher routine failed",
+				err,
+				"component", "log_watcher")
+			notifier.Show(fmt.Sprintf("Log watcher error: %v", err), notify.Error)
 		}
 	}()
 
-	p.log.Debug("Waiting for shutdown signal")
+	log.Info("Service started successfully",
+		"status", "running",
+		"waiting_for", "shutdown_signal")
 	waitForShutdown()
 	return p.Stop()
 }
 
 func (p *POEHelper) Stop() error {
-	p.log.Debug("Stopping POEHelper")
-	if p.logWatcher != nil {
-		p.logWatcher.Stop()
+	log := global.GetLogger()
+
+	log.Info("Initiating POE Helper shutdown")
+
+	if p.poeLogWatcher != nil {
+		log.Debug("Stopping log watcher")
+		p.poeLogWatcher.Stop()
 	}
+
+	log.Info("POE Helper shutdown complete",
+		"status", "stopped",
+		"processed_entries", len(p.entries))
 	return nil
 }
 
 func waitForShutdown() {
+	log := global.GetLogger()
+	log.Debug("Setting up shutdown signal handler",
+		"signals", []string{"SIGINT", "SIGTERM"})
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
+
+	sig := <-sigChan
+	log.Info("Shutdown signal received",
+		"signal", sig.String())
 }
