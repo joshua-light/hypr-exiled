@@ -21,41 +21,17 @@
             # Build dependencies
             pkg-config
 
-            # X11 and OpenGL dependencies
-            xorg.libX11.dev
-            xorg.libXrandr
-            xorg.libXinerama
-            xorg.libXcursor
-            xorg.libXi
-            xorg.libXxf86vm
-            libGL
-            libGLU
-            freeglut
-            mesa.dev
-            xorg.libxcb
-            xorg.libXrender
-            xorg.libXfixes
-            xorg.libXext
-            xorg.libXtst
-            mesa.drivers
-
-            # Input simulation
-            wtype
+            # Deps
+            rofi
           ];
 
           # Set library path for OpenGL
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
-            pkgs.libGL
-            pkgs.libGLU
-            pkgs.mesa.drivers
-            pkgs.xorg.libX11
-          ];
-
-          # Environment variables if needed
           shellHook = ''
             echo "PoE Helper development environment"
             echo "Ready to build with: go build -o poe-helper ./cmd/poe-helper"
           '';
         };
-      });
+      }) // {
+        targetSystems = [ "aarch64-linux" "x86_64-linux" ];
+      };
 }
