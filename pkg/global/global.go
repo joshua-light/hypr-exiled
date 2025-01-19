@@ -9,7 +9,7 @@ import (
 
 var (
 	cfg      *config.Config
-	log      *logger.Logger // Use concrete type instead of interface
+	log      *logger.Logger
 	notifier *notify.NotifyService
 	initOnce sync.Once
 	mu       sync.RWMutex

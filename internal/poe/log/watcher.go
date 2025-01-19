@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"poe-helper/internal/models"
@@ -14,12 +15,15 @@ import (
 	"poe-helper/pkg/global"
 )
 
+// Only match lines that start with a valid timestamp
 var timestampRegex = regexp.MustCompile(`^\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}`)
 
 type LogWatcher struct {
 	handler     func(models.TradeEntry)
 	windowCheck *window.Detector
 	stopChan    chan struct{}
+	mu          sync.Mutex
+	stopped     bool
 }
 
 func NewLogWatcher(handler func(models.TradeEntry)) (*LogWatcher, error) {
@@ -54,6 +58,29 @@ func (w *LogWatcher) Watch() error {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
 	defer file.Close()
+
+	// Create done channel for cleanup signaling
+	done := make(chan struct{})
+	defer close(done)
+
+	// Start the watch loop in a goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- w.watchLoop(file)
+	}()
+
+	// Wait for either stop signal or error
+	select {
+	case <-w.stopChan:
+		log.Info("Received stop signal")
+		return nil
+	case err := <-errChan:
+		return err
+	}
+}
+
+func (w *LogWatcher) watchLoop(file *os.File) error {
+	log := global.GetLogger()
 
 	// Get initial file size
 	stat, _ := file.Stat()
@@ -188,7 +215,6 @@ func (w *LogWatcher) processLogLine(line string) error {
 }
 
 func (w *LogWatcher) parseTimestamp(line string) (time.Time, error) {
-
 	parts := strings.SplitN(line, " ", 4)
 	if len(parts) < 4 {
 		return time.Time{}, fmt.Errorf("insufficient parts in line")
@@ -198,12 +224,27 @@ func (w *LogWatcher) parseTimestamp(line string) (time.Time, error) {
 	return time.Parse("2006/01/02 15:04:05", timestampStr)
 }
 
-func (w *LogWatcher) Stop() {
-	log := global.GetLogger()
+func (w *LogWatcher) Stop() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
+	if w.stopped {
+		return nil
+	}
+
+	log := global.GetLogger()
 	log.Info("Stopping log watcher")
+	// Signal the watch routine to stop
 	close(w.stopChan)
-	// w.windowCheck.Stop()
+
+	// Stop the window detector
+	if err := w.windowCheck.Stop(); err != nil {
+		log.Error("Failed to stop window detector", err)
+		return fmt.Errorf("failed to stop window detector: %w", err)
+	}
+
+	w.stopped = true
+	return nil
 }
 
 func min(a, b int) int {

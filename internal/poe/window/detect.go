@@ -21,6 +21,8 @@ type Detector struct {
 	windowClasses         []string
 	windowTitles          []string
 	wmManager             *wm.Manager
+	stopChan              chan struct{}
+	stopped               bool
 }
 
 // NewDetector creates a new POE window detector
@@ -38,6 +40,7 @@ func NewDetector() *Detector {
 		windowClasses:         []string{"pathofexile2", "steam_app_PATH_OF_EXILE_2_ID"},
 		windowTitles:          []string{"Path of Exile 2", "PoE 2"},
 		wmManager:             manager,
+		stopChan:              make(chan struct{}),
 	}
 }
 
@@ -139,13 +142,49 @@ func (d *Detector) Start() error {
 		return fmt.Errorf("window manager not initialized")
 	}
 
+	d.mu.Lock()
+	if d.stopped {
+		d.stopChan = make(chan struct{})
+		d.stopped = false
+	}
+	d.mu.Unlock()
+
 	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+
 		for {
-			if err := d.Detect(); err != nil {
-				log.Error("Window detection error", err)
+			select {
+			case <-d.stopChan:
+				log.Info("Window detector stopped")
+				return
+			case <-ticker.C:
+				if err := d.Detect(); err != nil {
+					log.Error("Window detection error", err)
+				}
 			}
-			time.Sleep(2 * time.Second)
 		}
 	}()
+
+	log.Info("Window detector started")
+	return nil
+}
+
+// Stop stops the window detection loop
+func (d *Detector) Stop() error {
+	log := global.GetLogger()
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.stopped {
+		log.Debug("Window detector already stopped")
+		return nil
+	}
+
+	log.Info("Stopping window detector")
+	close(d.stopChan)
+	d.stopped = true
+
 	return nil
 }
