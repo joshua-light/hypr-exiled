@@ -48,8 +48,8 @@ func NewManager() (*Manager, error) {
 }
 
 // FindWindow wraps the underlying window manager's FindWindow method
-func (m *Manager) FindWindow(classNames []string, titles []string) (Window, error) {
-	return m.wm.FindWindow(classNames, titles)
+func (m *Manager) FindWindow(classNames []string) (Window, error) {
+	return m.wm.FindWindow(classNames)
 }
 
 // FocusWindow wraps the underlying window manager's FocusWindow method

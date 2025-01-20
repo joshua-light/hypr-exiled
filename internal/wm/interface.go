@@ -3,7 +3,7 @@ package wm
 // WindowManager interface defines the required methods for window managers
 type WindowManager interface {
 	// FindWindow looks for a window by class name or title
-	FindWindow(classNames []string, titles []string) (Window, error)
+	FindWindow(classNames []string) (Window, error)
 	// FocusWindow brings the specified window to front
 	FocusWindow(Window) error
 	// Name returns the WM name for logging/display
@@ -14,11 +14,10 @@ type WindowManager interface {
 type Window struct {
 	ID      string // For X11
 	Class   string
-	Title   string
 	Address string // For Hyprland
 }
 
 // IsEmpty checks if the window is empty/not found
 func (w Window) IsEmpty() bool {
-	return w.ID == "" && w.Address == "" && w.Class == "" && w.Title == ""
+	return w.ID == "" && w.Address == "" && w.Class == ""
 }

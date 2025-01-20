@@ -34,7 +34,7 @@ func (h *Hyprland) Name() string {
 	return "Hyprland"
 }
 
-func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, error) {
+func (h *Hyprland) FindWindow(classNames []string) (Window, error) {
 	log := global.GetLogger()
 	notifier := global.GetNotifier()
 
@@ -53,7 +53,6 @@ func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, err
 	var windows []struct {
 		Address string `json:"address"`
 		Class   string `json:"class"`
-		Title   string `json:"title"`
 	}
 
 	if err := json.Unmarshal(output, &windows); err != nil {
@@ -68,7 +67,6 @@ func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, err
 			if strings.Contains(strings.ToLower(w.Class), strings.ToLower(class)) {
 				foundWindow := Window{
 					Class:   w.Class,
-					Title:   w.Title,
 					Address: w.Address,
 				}
 
@@ -76,29 +74,6 @@ func (h *Hyprland) FindWindow(classNames []string, titles []string) (Window, err
 				if foundWindow != h.lastFoundWindow {
 					log.Debug("Found matching window by class",
 						"class", w.Class,
-						"title", w.Title,
-						"address", w.Address)
-					h.lastFoundWindow = foundWindow
-				}
-
-				h.hasLoggedWaiting = false
-				return foundWindow, nil
-			}
-		}
-		// Check titles
-		for _, title := range titles {
-			if strings.Contains(strings.ToLower(w.Title), strings.ToLower(title)) {
-				foundWindow := Window{
-					Class:   w.Class,
-					Title:   w.Title,
-					Address: w.Address,
-				}
-
-				// Only log if this is a different window than last time
-				if foundWindow != h.lastFoundWindow {
-					log.Debug("Found matching window by title",
-						"class", w.Class,
-						"title", w.Title,
 						"address", w.Address)
 					h.lastFoundWindow = foundWindow
 				}

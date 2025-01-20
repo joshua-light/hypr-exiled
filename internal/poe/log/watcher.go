@@ -210,7 +210,6 @@ func (w *LogWatcher) processLogLine(line string) error {
 			}
 		}
 	}
-
 	return nil
 }
 

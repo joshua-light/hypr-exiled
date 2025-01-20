@@ -37,8 +37,7 @@ func NewDetector() *Detector {
 
 	return &Detector{
 		poeHelperSessionStart: time.Now(),
-		windowClasses:         []string{"pathofexile2", "steam_app_PATH_OF_EXILE_2_ID"},
-		windowTitles:          []string{"Path of Exile 2", "PoE 2"},
+		windowClasses:         []string{"steam_app_2694490"},
 		wmManager:             manager,
 		stopChan:              make(chan struct{}),
 	}
@@ -49,7 +48,7 @@ func (d *Detector) Detect() error {
 	log := global.GetLogger()
 	notifier := global.GetNotifier()
 
-	window, err := d.wmManager.FindWindow(d.windowClasses, d.windowTitles)
+	window, err := d.wmManager.FindWindow(d.windowClasses)
 	if err != nil {
 		log.Error("Error detecting game window", err)
 		return err
@@ -66,7 +65,7 @@ func (d *Detector) Detect() error {
 			d.windowFoundTime = time.Now()
 			log.Info("PoE window found",
 				"class", window.Class,
-				"title", window.Title)
+			)
 			notifier.Show("PoE window found, monitoring trades...", notify.Info)
 		} else {
 			log.Info("PoE window lost")

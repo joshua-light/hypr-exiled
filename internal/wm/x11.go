@@ -21,7 +21,7 @@ func (x *X11) Name() string {
 	return "X11"
 }
 
-func (x *X11) FindWindow(classNames []string, titles []string) (Window, error) {
+func (x *X11) FindWindow(classNames []string) (Window, error) {
 	for _, class := range classNames {
 		out, err := exec.Command("xdotool", "search", "--class", class).Output()
 		if err == nil && len(out) > 0 {
@@ -29,30 +29,11 @@ func (x *X11) FindWindow(classNames []string, titles []string) (Window, error) {
 			windowID := strings.Split(strings.TrimSpace(string(out)), "\n")[0]
 
 			// Get window title
-			titleOut, err := exec.Command("xdotool", "getwindowname", windowID).Output()
+			_, err := exec.Command("xdotool", "getwindowname", windowID).Output()
 			if err == nil {
 				return Window{
 					ID:    windowID,
 					Class: class,
-					Title: strings.TrimSpace(string(titleOut)),
-				}, nil
-			}
-		}
-	}
-
-	for _, title := range titles {
-		out, err := exec.Command("xdotool", "search", "--name", title).Output()
-		if err == nil && len(out) > 0 {
-			// Get the first window ID (first line)
-			windowID := strings.Split(strings.TrimSpace(string(out)), "\n")[0]
-
-			// Get window class
-			classOut, err := exec.Command("xdotool", "getwindowclassname", windowID).Output()
-			if err == nil {
-				return Window{
-					ID:    windowID,
-					Class: strings.TrimSpace(string(classOut)),
-					Title: title,
 				}, nil
 			}
 		}
