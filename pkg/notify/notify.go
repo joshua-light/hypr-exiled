@@ -10,6 +10,8 @@ import (
 // NotificationType represents the type of notification
 type NotificationType int
 
+const DefaultTitle = "PoE Helper"
+
 const (
 	Error NotificationType = iota
 	Info
@@ -29,43 +31,56 @@ func NewNotifyService(notifyCommand string, log *logger.Logger) *NotifyService {
 	}
 }
 
-// Show displays a notification of the specified type
+// Show displays a notification with the default title
 func (n *NotifyService) Show(message string, nType NotificationType) error {
+	return n.ShowWithTitle(DefaultTitle, message, nType)
+}
+
+// ShowWithTitle displays a notification with a custom title
+func (n *NotifyService) ShowWithTitle(title string, message string, nType NotificationType) error {
 	// First try configured notification command if available
 	if n.notifyCommand != "" {
-		if err := n.executeNotifyCommand(message, nType); err == nil {
+		if err := n.executeNotifyCommand(title, message, nType); err == nil {
 			return nil
 		}
 		n.log.Warn("Custom notification command failed", "command", n.notifyCommand)
 	}
 
 	// Try system notification tools
-	if err := n.trySystemNotification(message, nType); err == nil {
+	if err := n.trySystemNotification(title, message, nType); err == nil {
 		return nil
 	}
 
 	// If running in terminal, print directly
 	if isRunningInTerminal() {
-		return n.printToTerminal(message, nType)
+		return n.printToTerminal(title, message, nType)
 	}
 
 	// Try to open a terminal
-	if err := n.tryTerminalNotification(message, nType); err == nil {
+	if err := n.tryTerminalNotification(title, message, nType); err == nil {
 		return nil
 	}
 
 	// Last resort: log file
-	return n.writeToLogFile(message, nType)
+	return n.writeToLogFile(title, message, nType)
 }
 
-func (n *NotifyService) executeNotifyCommand(message string, nType NotificationType) error {
-	n.log.Debug("executingNotifyhCommand", "notifyCommand", n.notifyCommand,
+func (n *NotifyService) executeNotifyCommand(title string, message string, nType NotificationType) error {
+	n.log.Debug("executingNotifyCommand",
+		"notifyCommand", n.notifyCommand,
+		"title", title,
 		"nType", nType)
+
 	typeStr := "ERROR"
 	if nType == Info {
 		typeStr = "INFO"
 	}
 
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("%s '%s' '%s'", n.notifyCommand, typeStr, message))
+	cmd := exec.Command("sh", "-c",
+		fmt.Sprintf("%s '%s' '%s' '%s'",
+			n.notifyCommand,
+			typeStr,
+			title,
+			message))
 	return cmd.Run()
 }

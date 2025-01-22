@@ -8,6 +8,7 @@ import (
 	"poe-helper/internal/rofi"
 	"poe-helper/internal/storage"
 	"poe-helper/pkg/global"
+	"poe-helper/pkg/notify"
 )
 
 // NewTradeManager creates a new TradeManager instance.
@@ -43,10 +44,32 @@ func NewTradeManager() *TradeManager {
 // AddTrade adds a new trade to the database.
 func (m *TradeManager) AddTrade(trade models.TradeEntry) error {
 	m.log.Debug("Adding trade", "trade", trade)
+
 	if err := m.db.AddTrade(trade); err != nil {
 		m.log.Error("Failed to add trade", err)
 		return fmt.Errorf("failed to add trade: %w", err)
 	}
+
+	// Create notification message based on trade type
+	var notificationMsg string
+	if trade.TriggerType == "incoming_trade" {
+		notificationMsg = fmt.Sprintf("@%s wants to buy %s for %.0f %s",
+			trade.PlayerName,
+			trade.ItemName,
+			trade.CurrencyAmount,
+			trade.CurrencyType)
+	} else {
+		notificationMsg = fmt.Sprintf("Trade request for %s sent to @%s",
+			trade.ItemName,
+			trade.PlayerName,
+		)
+	}
+
+	// Send notification
+	if err := global.GetNotifier().Show(notificationMsg, notify.Info); err != nil {
+		m.log.Error("Failed to send trade notification", err)
+	}
+
 	m.log.Info("Trade added successfully", "trade", trade)
 	return nil
 }

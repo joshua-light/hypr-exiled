@@ -8,17 +8,17 @@ import (
 	"time"
 )
 
-func (n *NotifyService) tryTerminalNotification(message string, nType NotificationType) error {
+func (n *NotifyService) tryTerminalNotification(title string, message string, nType NotificationType) error {
 	terminal := getSystemTerminal()
 	if terminal == "" {
 		return fmt.Errorf("no terminal found")
 	}
 
 	colorCode := "\\e[32m" // Green for info
-	prefix := "Info"
+	prefix := fmt.Sprintf("%s - %s", title, "Info")
 	if nType == Error {
 		colorCode = "\\e[31m" // Red for error
-		prefix = "Error"
+		prefix = fmt.Sprintf("%s - %s", title, "Error")
 	}
 
 	displayMsg := fmt.Sprintf("echo -e '%s%s:\\e[0m %s\nPress any key to continue...'",
@@ -45,7 +45,7 @@ func (n *NotifyService) tryTerminalNotification(message string, nType Notificati
 	return fmt.Errorf("failed to show terminal notification")
 }
 
-func (n *NotifyService) writeToLogFile(message string, nType NotificationType) error {
+func (n *NotifyService) writeToLogFile(title string, message string, nType NotificationType) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
@@ -57,8 +57,9 @@ func (n *NotifyService) writeToLogFile(message string, nType NotificationType) e
 	}
 
 	logPath := fmt.Sprintf("%s/.poe-helper-notifications.log", homeDir)
-	logMessage := fmt.Sprintf("[%s] %s: %s\n",
+	logMessage := fmt.Sprintf("[%s] %s - %s: %s\n",
 		time.Now().Format("2006-01-02 15:04:05"),
+		title,
 		typeStr,
 		message)
 
@@ -74,17 +75,17 @@ func (n *NotifyService) writeToLogFile(message string, nType NotificationType) e
 	return nil
 }
 
-func (n *NotifyService) printToTerminal(message string, nType NotificationType) error {
+func (n *NotifyService) printToTerminal(title string, message string, nType NotificationType) error {
 	var colorCode string
 	var prefix string
 
 	switch nType {
 	case Error:
 		colorCode = "\x1b[31m" // Red
-		prefix = "Error"
+		prefix = fmt.Sprintf("%s - Error", title)
 	case Info:
 		colorCode = "\x1b[32m" // Green
-		prefix = "Info"
+		prefix = fmt.Sprintf("%s - Info", title)
 	}
 
 	fmt.Fprintf(os.Stderr, "%s%s: %s\x1b[0m\n", colorCode, prefix, message)
