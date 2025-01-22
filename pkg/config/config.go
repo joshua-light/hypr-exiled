@@ -113,7 +113,10 @@ func DefaultConfig(log *logger.Logger) (*Config, error) {
 	config := &Config{
 		PoeLogPath: logPath,
 		Triggers: map[string]string{
-			"trade": `\[INFO Client \d+\] @From ([^:]+):.*would like to buy`,
+			// Buying from others (they want to sell to us)
+			"incoming_trade": `\[INFO Client \d+\] @From ([^:]+): Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\d+(?:\.\d+)?) ([^ ]+) in ([^\(]+) \(stash tab "([^"]+)"; position: left (\d+), top (\d+)\)`,
+			// Selling to others (they want to buy from us)
+			"outgoing_trade": `\[INFO Client \d+\] @To ([^:]+): Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\d+(?:\.\d+)?) ([^ ]+) in ([^\(]+) \(stash tab "([^"]+)"; position: left (\d+), top (\d+)\)`,
 		},
 		Commands: map[string]string{
 			"trade":  "@trade {player}",

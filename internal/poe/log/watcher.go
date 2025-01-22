@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -189,20 +190,47 @@ func (w *LogWatcher) processLogLine(line string) error {
 	for triggerName, trigger := range cfg.CompiledTriggers {
 		matches := trigger.FindStringSubmatch(line)
 		if len(matches) > 1 {
-			playerName := matches[1]
-			log.Info("Triggered event",
-				"trigger", triggerName,
-				"player", playerName,
-				"line", line,
-			)
+			// Convert currency amount to float
+			amount, _ := strconv.ParseFloat(matches[3], 64)
+
+			// Parse position coordinates
+			left, _ := strconv.Atoi(matches[7])
+			top, _ := strconv.Atoi(matches[8])
+
+			// Trim any whitespace from the league name
+			league := strings.TrimSpace(matches[5])
 
 			// Create the trade entry
 			entry := models.TradeEntry{
-				Timestamp:   timestamp,
-				TriggerType: triggerName,
-				PlayerName:  playerName,
-				Message:     line,
+				Timestamp:      timestamp,
+				TriggerType:    triggerName,
+				PlayerName:     matches[1],
+				ItemName:       matches[2],
+				CurrencyAmount: amount,
+				CurrencyType:   matches[4],
+				League:         league, // Add league field to your struct if not present
+				StashTab:       matches[6],
+				Position: struct {
+					Left int
+					Top  int
+				}{
+					Left: left,
+					Top:  top,
+				},
+				Message:      line,
+				IsBuyRequest: triggerName == "outgoing_trade",
 			}
+
+			log.Info("Triggered trade event",
+				"trigger", triggerName,
+				"player", entry.PlayerName,
+				"item", entry.ItemName,
+				"amount", entry.CurrencyAmount,
+				"currency", entry.CurrencyType,
+				"league", entry.League,
+				"stash", entry.StashTab,
+				"position", fmt.Sprintf("left: %d, top: %d", entry.Position.Left, entry.Position.Top),
+			)
 
 			// Call the trade entry callback if provided
 			if w.handler != nil {

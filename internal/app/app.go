@@ -9,6 +9,7 @@ import (
 
 	"poe-helper/internal/models"
 	"poe-helper/internal/poe/log"
+	"poe-helper/internal/trade_manager"
 	"poe-helper/pkg/global"
 	"poe-helper/pkg/notify"
 )
@@ -16,6 +17,7 @@ import (
 type POEHelper struct {
 	entries       []models.TradeEntry
 	poeLogWatcher *poe_log.LogWatcher
+	tradeManager  *trade_manager.Manager
 }
 
 func NewPOEHelper() (*POEHelper, error) {
@@ -35,8 +37,12 @@ func NewPOEHelper() (*POEHelper, error) {
 		return nil, err
 	}
 
+	// Initialize trade manager first since other components depend on it
+	tradeManager := trade_manager.NewManager()
+
 	helper := &POEHelper{
-		entries: make([]models.TradeEntry, 0),
+		entries:      make([]models.TradeEntry, 0),
+		tradeManager: tradeManager,
 	}
 
 	log.Debug("Creating log watcher instance")
@@ -52,9 +58,6 @@ func NewPOEHelper() (*POEHelper, error) {
 	}
 
 	helper.poeLogWatcher = logWatcher
-	log.Info("POEHelper initialized successfully",
-		"watcher_status", "ready",
-		"entry_buffer_size", len(helper.entries))
 	return helper, nil
 }
 
@@ -62,42 +65,17 @@ func checkDependencies() error {
 	log := global.GetLogger()
 
 	log.Info("Checking system dependencies")
-	if _, err := exec.LookPath("rofi"); err != nil {
-		log.Info("Dependency check failed",
-			"missing_dependency", "rofi",
-			"error", err)
-		return fmt.Errorf("rofi is not installed. Please install it using your package manager")
+	deps := []string{"rofi", "swhkd"}
+	for _, dep := range deps {
+		if _, err := exec.LookPath(dep); err != nil {
+			log.Info("Dependency check failed",
+				"missing_dependency", dep,
+				"error", err)
+			return fmt.Errorf("%s is not installed. Please install it using your package manager", dep)
+		}
 	}
 	log.Info("All dependencies satisfied")
 	return nil
-}
-
-func (p *POEHelper) handleTradeEntry(entry models.TradeEntry) {
-	notifier := global.GetNotifier()
-	log := global.GetLogger()
-
-	log.Info("Trade request received",
-		"player", entry.PlayerName,
-		"type", entry.TriggerType,
-		"timestamp", entry.Timestamp,
-		"entry_count", len(p.entries))
-
-	log.Debug("Processing trade entry",
-		"current_entries", len(p.entries),
-		"new_entry_player", entry.PlayerName)
-	p.entries = append(p.entries, entry)
-
-	message := fmt.Sprintf("Trade request from %s", entry.PlayerName)
-	log.Debug("Preparing notification",
-		"message", message,
-		"type", "info")
-
-	if err := notifier.Show(message, notify.Info); err != nil {
-		log.Error("Notification failed",
-			err,
-			"player", entry.PlayerName,
-			"message", message)
-	}
 }
 
 func (p *POEHelper) Run() error {
@@ -156,4 +134,16 @@ func waitForShutdown() {
 	sig := <-sigChan
 	log.Info("Shutdown signal received",
 		"signal", sig.String())
+}
+
+func (p *POEHelper) handleTradeEntry(entry models.TradeEntry) {
+	log := global.GetLogger()
+
+	if err := p.tradeManager.AddTrade(entry); err != nil {
+		log.Error("Failed to process trade in manager",
+			err,
+			"player", entry.PlayerName,
+			"item", entry.ItemName)
+	}
+	p.tradeManager.ShowTrades()
 }
