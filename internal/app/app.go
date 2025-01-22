@@ -17,7 +17,7 @@ import (
 type POEHelper struct {
 	entries       []models.TradeEntry
 	poeLogWatcher *poe_log.LogWatcher
-	tradeManager  *trade_manager.Manager
+	tradeManager  *trade_manager.TradeManager
 }
 
 func NewPOEHelper() (*POEHelper, error) {
@@ -38,7 +38,7 @@ func NewPOEHelper() (*POEHelper, error) {
 	}
 
 	// Initialize trade manager first since other components depend on it
-	tradeManager := trade_manager.NewManager()
+	tradeManager := trade_manager.NewTradeManager()
 
 	helper := &POEHelper{
 		entries:      make([]models.TradeEntry, 0),
@@ -65,7 +65,7 @@ func checkDependencies() error {
 	log := global.GetLogger()
 
 	log.Info("Checking system dependencies")
-	deps := []string{"rofi", "swhkd"}
+	deps := []string{"rofi"}
 	for _, dep := range deps {
 		if _, err := exec.LookPath(dep); err != nil {
 			log.Info("Dependency check failed",

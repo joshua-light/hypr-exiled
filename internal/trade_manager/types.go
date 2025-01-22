@@ -1,9 +1,11 @@
 package trade_manager
 
 import (
-	"net"
-	"os/exec"
 	"sync"
+
+	"poe-helper/internal/rofi"
+	"poe-helper/internal/storage"
+	"poe-helper/pkg/logger"
 )
 
 type RofiConfig struct {
@@ -20,11 +22,10 @@ type Trade struct {
 }
 
 type TradeManager struct {
-	trades     []Trade
-	mu         sync.RWMutex
-	socketPath string
-	listener   net.Listener
-	rofiCmd    *exec.Cmd
+	db   *storage.DB
+	rofi *rofi.TradeDisplayManager
+	mu   sync.RWMutex
+	log  *logger.Logger
 }
 
 type Currency struct {

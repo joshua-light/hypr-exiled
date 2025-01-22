@@ -2,204 +2,153 @@ package trade_manager
 
 import (
 	"fmt"
-	"os/exec"
-	"strings"
-	"sync"
+	"time"
 
 	"poe-helper/internal/models"
+	"poe-helper/internal/rofi"
+	"poe-helper/internal/storage"
 	"poe-helper/pkg/global"
-	"poe-helper/pkg/logger"
 )
 
-var defaultRofiConfig = RofiConfig{
-	Args: []string{
-		"-dmenu",
-		"-markup-rows",
-		"-multi-select",
-		"-kb-custom-1", "t",
-		"-kb-custom-2", "p",
-		"-kb-custom-3", "f",
-		"-kb-custom-4", "d",
-		"-kb-accept-entry", "Return",
-		"-theme", "~/.config/rofi/trade.rasi",
-	},
-	Message: "T (trade) | P (party) | F (finish) | D (delete)",
-}
+// NewTradeManager creates a new TradeManager instance.
+func NewTradeManager() *TradeManager {
+	log := global.GetLogger()
 
-type Manager struct {
-	trades []models.TradeEntry
-	mu     sync.RWMutex
-	log    *logger.Logger
-}
-
-func NewManager() *Manager {
-	return &Manager{
-		trades: make([]models.TradeEntry, 0),
-		log:    global.GetLogger(),
-	}
-}
-
-// AddTrade only adds the trade to the list without showing Rofi
-func (m *Manager) AddTrade(trade models.TradeEntry) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.log.Debug("Adding new trade",
-		"player", trade.PlayerName,
-		"item", trade.ItemName,
-		"trigger", trade.TriggerType)
-
-	// Check for existing trade with same characteristics
-	exists := false
-	for i, existing := range m.trades {
-		if existing.PlayerName == trade.PlayerName &&
-			existing.ItemName == trade.ItemName &&
-			existing.Position.Left == trade.Position.Left &&
-			existing.Position.Top == trade.Position.Top {
-			m.trades[i] = trade // Update existing entry
-			exists = true
-			break
-		}
-	}
-
-	if !exists {
-		m.trades = append(m.trades, trade)
-	}
-
-	return nil
-}
-
-func (m *Manager) ShowTrades() error {
-	selected, exitCode, err := m.showRofi()
+	db, err := storage.New()
 	if err != nil {
-		return fmt.Errorf("rofi display error: %w", err)
+		log.Fatal("Failed to initialize storage", err)
 	}
 
-	m.handleTrades(selected, exitCode)
+	// Cleanup old trades (older than 24 hours)
+	go func() {
+		if err := db.Cleanup(24 * time.Hour); err != nil {
+			log.Error("Failed to cleanup old trades", err)
+		}
+	}()
+
+	rofiManager := rofi.NewTradeDisplayManager(
+		handleTrade,  // Trade handler
+		handleParty,  // Party handler
+		handleFinish, // Finish handler
+		handleDelete, // Delete handler
+	)
+
+	return &TradeManager{
+		db:   db,
+		rofi: rofiManager,
+		log:  log,
+	}
+}
+
+// AddTrade adds a new trade to the database.
+func (m *TradeManager) AddTrade(trade models.TradeEntry) error {
+	m.log.Debug("Adding trade", "trade", trade)
+	if err := m.db.AddTrade(trade); err != nil {
+		m.log.Error("Failed to add trade", err)
+		return fmt.Errorf("failed to add trade: %w", err)
+	}
+	m.log.Info("Trade added successfully", "trade", trade)
 	return nil
 }
 
-// showRofi displays the trade list and returns user selection
-func (m *Manager) showRofi() (string, int, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+// ShowTrades displays the trades using Rofi.
+func (m *TradeManager) ShowTrades() error {
+	m.log.Debug("Fetching trades from database")
+	trades, err := m.db.GetTrades()
+	if err != nil {
+		m.log.Error("Failed to get trades", err)
+		return fmt.Errorf("failed to get trades: %w", err)
+	}
 
-	if len(m.trades) == 0 {
+	if len(trades) == 0 {
 		m.log.Debug("No trades to display")
-		return "", 0, nil
+		return nil
 	}
 
+	// Format trades for Rofi
 	var options []string
-	for _, trade := range m.trades {
-		options = append(options, formatTrade(trade))
-	}
-
-	m.log.Debug("Showing rofi window",
-		"trade_count", len(options))
-
-	cmd := exec.Command("rofi", defaultRofiConfig.Args...)
-	cmd.Stdin = strings.NewReader(strings.Join(options, "\n"))
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return string(output), exitErr.ExitCode(), nil
-		}
-		return "", 0, err
-	}
-
-	return string(output), 0, nil
-}
-
-func (m *Manager) removeTrades(toRemove []models.TradeEntry) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	newTrades := make([]models.TradeEntry, 0, len(m.trades))
-	for _, trade := range m.trades {
-		shouldKeep := true
-		for _, remove := range toRemove {
-			if trade.PlayerName == remove.PlayerName &&
-				trade.ItemName == remove.ItemName &&
-				trade.Position.Left == remove.Position.Left &&
-				trade.Position.Top == remove.Position.Top {
-				shouldKeep = false
-				break
-			}
-		}
-		if shouldKeep {
-			newTrades = append(newTrades, trade)
-		}
-	}
-	m.trades = newTrades
-}
-
-func (m *Manager) handleTrades(selected string, exitCode int) {
-	selected = strings.TrimSpace(selected)
-	if selected == "" {
-		return
-	}
-
-	var selectedTrades []models.TradeEntry
-	m.mu.RLock()
-	for _, trade := range m.trades {
+	for _, trade := range trades {
 		formattedTrade := formatTrade(trade)
-		if strings.Contains(selected, formattedTrade) {
-			selectedTrades = append(selectedTrades, trade)
-		}
+		options = append(options, formattedTrade)
+		m.log.Debug("Formatted trade", "trade", formattedTrade)
 	}
-	m.mu.RUnlock()
 
-	m.log.Debug("Processing trade action",
-		"exit_code", exitCode,
-		"selected_trades", len(selectedTrades))
-
-	switch exitCode {
-	case 10: // T pressed - Trade
-		for _, trade := range selectedTrades {
-			m.log.Info("Initiating trade",
-				"player", trade.PlayerName,
-				"item", trade.ItemName)
-			// TODO: Implement trade command execution
-		}
-		m.ShowTrades() // Show trades again after action
-	case 11: // P pressed - Party
-		for _, trade := range selectedTrades {
-			m.log.Info("Sending party invite",
-				"player", trade.PlayerName)
-			// TODO: Implement party invite command execution
-		}
-		m.ShowTrades() // Show trades again after action
-	case 12: // F pressed - Finish
-		m.log.Info("Finishing trades", "count", len(selectedTrades))
-		m.removeTrades(selectedTrades)
-		m.ShowTrades() // Show remaining trades if any
-	case 13: // D pressed - Delete
-		m.log.Info("Deleting trades", "count", len(selectedTrades))
-		m.removeTrades(selectedTrades)
-		m.ShowTrades() // Show remaining trades if any
+	m.log.Info("Displaying trades in Rofi", "trade_count", len(trades))
+	if err := m.rofi.DisplayTrades(options); err != nil {
+		m.log.Error("Failed to display trades in Rofi", err)
+		return fmt.Errorf("failed to show trades in rofi: %w", err)
 	}
+
+	return nil
 }
 
-// Helper function to format trade entries for display
+// handleTrade processes the trade action.
+func handleTrade(selected string) error {
+	log := global.GetLogger()
+	log.Info("Trade action triggered", "selected", selected)
+	// Implement trade logic here
+	return nil
+}
+
+// handleParty processes the party action.
+func handleParty(selected string) error {
+	log := global.GetLogger()
+	log.Info("Party action triggered", "selected", selected)
+	// Implement party logic here
+	return nil
+}
+
+// handleFinish processes the finish action.
+func handleFinish(selected string) error {
+	log := global.GetLogger()
+	log.Info("Finish action triggered", "selected", selected)
+	// Implement finish logic here
+	return nil
+}
+
+// handleDelete processes the delete action.
+func handleDelete(selected string) error {
+	log := global.GetLogger()
+	log.Info("Delete action triggered", "selected", selected)
+	// Implement delete logic here
+	return nil
+}
+
+// formatTrade formats a trade entry for display.
 func formatTrade(trade models.TradeEntry) string {
+	currencySymbols := map[string]string{
+		"divine": "⚡", // Use a Unicode symbol for Divine Orb
+		// Add other currency types and their symbols here
+	}
+
 	currencyStr := fmt.Sprintf("%.0f", trade.CurrencyAmount)
 	if trade.CurrencyAmount != float64(int(trade.CurrencyAmount)) {
 		currencyStr = fmt.Sprintf("%.2f", trade.CurrencyAmount)
 	}
 
-	priceStr := fmt.Sprintf("%s %s", currencyStr, trade.CurrencyType)
+	symbol, exists := currencySymbols[trade.CurrencyType]
+	if !exists {
+		symbol = trade.CurrencyType // Fallback to text if symbol not found
+	}
+
+	priceStr := fmt.Sprintf("%s %s", currencyStr, symbol)
 
 	switch trade.TriggerType {
 	case "incoming_trade":
-		return fmt.Sprintf("%s > %s <span size='small'>(@%s)</span>",
+		return fmt.Sprintf("%s > %s (@%s)",
 			trade.ItemName,
 			priceStr,
 			trade.PlayerName)
 	default: // outgoing_trade
-		return fmt.Sprintf("%s > %s <span size='small'>(@%s)</span>",
+		return fmt.Sprintf("%s > %s (@%s)",
 			priceStr,
 			trade.ItemName,
 			trade.PlayerName)
 	}
+}
+
+// Close closes the database connection.
+func (m *TradeManager) Close() error {
+	m.log.Info("Closing TradeManager")
+	return m.db.Close()
 }
