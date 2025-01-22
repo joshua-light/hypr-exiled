@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"poe-helper/pkg/logger"
+	"hypr-exiled/pkg/logger"
 )
 
 type Config struct {
@@ -124,6 +124,7 @@ func DefaultConfig(log *logger.Logger) (*Config, error) {
 			"thank":  "@{player} thanks!",
 		},
 		NotifyCommand: "",
+		log:           log, // Initialize the logger field
 	}
 
 	log.Info("Created default configuration",
@@ -151,7 +152,7 @@ func FindConfig(providedPath string, log *logger.Logger) (*Config, error) {
 	}
 
 	// Setup default paths
-	defaultConfigDir := filepath.Join(homeConfigDir, "rofi-poe-helper")
+	defaultConfigDir := filepath.Join(homeConfigDir, "hypr-exiled")
 	defaultConfigPath := filepath.Join(defaultConfigDir, "config.json")
 	defaultLogsDir := filepath.Join(defaultConfigDir, "logs")
 

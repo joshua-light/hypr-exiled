@@ -5,8 +5,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"poe-helper/pkg/global"
-	"poe-helper/pkg/logger"
+	"hypr-exiled/pkg/global"
+	"hypr-exiled/pkg/logger"
 )
 
 // Config holds the configuration for the Rofi menu.

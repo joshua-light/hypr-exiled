@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"hypr-exiled/internal/models"
+
 	_ "github.com/mattn/go-sqlite3"
-	"poe-helper/internal/models"
 )
 
 type DB struct {
@@ -41,7 +42,7 @@ func New() (*DB, error) {
 	}
 
 	// Ensure directory exists
-	dbDir := filepath.Join(configDir, "rofi-poe-helper")
+	dbDir := filepath.Join(configDir, "hypr-exiled")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}

@@ -2,8 +2,8 @@ package wm
 
 import (
 	"fmt"
+	"hypr-exiled/pkg/global"
 	"os"
-	"poe-helper/pkg/global"
 )
 
 // Manager handles window management operations based on the session type

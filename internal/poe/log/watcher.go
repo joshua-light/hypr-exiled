@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"poe-helper/internal/models"
-	"poe-helper/internal/poe/window"
+	"hypr-exiled/internal/models"
+	"hypr-exiled/internal/poe/window"
 
-	"poe-helper/pkg/global"
+	"hypr-exiled/pkg/global"
 )
 
 // Only match lines that start with a valid timestamp

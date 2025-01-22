@@ -1,5 +1,5 @@
 {
-  description = "PoE Helper development environment";
+  description = "Hypr Exiled development environment";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
@@ -27,8 +27,8 @@
 
           # Set library path for OpenGL
           shellHook = ''
-            echo "PoE Helper development environment"
-            echo "Ready to build with: go build -o poe-helper ./cmd/poe-helper"
+            echo "Hypr Exiled development environment"
+            echo "Ready to build with: go build -o hypr-exiled ./cmd/hypr-exiled"
           '';
         };
       }) // {

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	"poe-helper/internal/models"
-	"poe-helper/internal/rofi"
-	"poe-helper/internal/storage"
-	"poe-helper/pkg/global"
-	"poe-helper/pkg/notify"
+	"hypr-exiled/internal/models"
+	"hypr-exiled/internal/rofi"
+	"hypr-exiled/internal/storage"
+	"hypr-exiled/pkg/global"
+	"hypr-exiled/pkg/notify"
 )
 
 // NewTradeManager creates a new TradeManager instance.

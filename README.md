@@ -1,4 +1,4 @@
-# PoE Helper Documentation
+# Hypr Exiled Documentation
 
 ## Table of Contents
 
@@ -12,7 +12,7 @@
 
 ## Overview
 
-PoE Helper is a Go application designed to enhance Path of Exile 2 gameplay by providing automated responses to in-game events. It monitors the game's log file and provides a simple GUI for executing commands.
+Hypr Exiled is a Go application designed to enhance Path of Exile 2 gameplay by providing automated responses to in-game events. It monitors the game's log file and provides a simple GUI for executing commands.
 
 ### Key Features
 
@@ -27,9 +27,9 @@ PoE Helper is a Go application designed to enhance Path of Exile 2 gameplay by p
 ### Component Overview
 
 ```
-poe-helper/
+hypr-exiled/
 ├── cmd/
-│   └── poe-helper/
+│   └── hypr-exiled/
 │       └── main.go
 ├── internal/
 │   ├── app/
@@ -89,17 +89,17 @@ The application uses structured logging with different log levels and outputs:
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/poe-helper
-cd poe-helper
+git clone https://github.com/yourusername/hypr-exiled
+cd hypr-exiled
 
 # Install dependencies
 go mod download
 
 # Build
-go build -o poe-helper cmd/poe-helper/main.go
+go build -o hypr-exiled cmd/hypr-exiled/main.go
 
 # Run
-./poe-helper
+./hypr-exiled
 ```
 
 ### Development Setup
@@ -143,7 +143,7 @@ Example log setup:
 
 ```go
 logger := log.NewLogger(
-    log.WithFile("poe-helper.log"),
+    log.WithFile("hypr-exiled.log"),
     log.WithConsole(),
     log.WithLevel(log.DebugLevel),
 )
@@ -196,13 +196,13 @@ Solution: Verify wtype installation and permissions
 Enable debug logging:
 
 ```bash
-POE_HELPER_LOG_LEVEL=debug ./poe-helper
+POE_HELPER_LOG_LEVEL=debug ./hypr-exiled
 ```
 
 View logs:
 
 ```bash
-tail -f ~/.local/share/poe-helper/logs/debug.log
+tail -f ~/.local/share/hypr-exiled/logs/debug.log
 ```
 
 ## Contributing

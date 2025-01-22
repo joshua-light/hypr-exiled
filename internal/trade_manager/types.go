@@ -3,9 +3,9 @@ package trade_manager
 import (
 	"sync"
 
-	"poe-helper/internal/rofi"
-	"poe-helper/internal/storage"
-	"poe-helper/pkg/logger"
+	"hypr-exiled/internal/rofi"
+	"hypr-exiled/internal/storage"
+	"hypr-exiled/pkg/logger"
 )
 
 type RofiConfig struct {

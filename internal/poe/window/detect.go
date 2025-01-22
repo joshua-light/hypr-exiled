@@ -6,14 +6,14 @@ import (
 	"sync"
 	"time"
 
-	"poe-helper/internal/wm"
-	"poe-helper/pkg/global"
-	"poe-helper/pkg/notify"
+	"hypr-exiled/internal/wm"
+	"hypr-exiled/pkg/global"
+	"hypr-exiled/pkg/notify"
 )
 
 // Detector handles POE window detection
 type Detector struct {
-	poeHelperSessionStart time.Time
+	hyprExiledSessionStart time.Time
 	lastResetTimestamp    time.Time
 	windowFoundTime       time.Time
 	isWindowActive        bool
@@ -36,7 +36,7 @@ func NewDetector() *Detector {
 	}
 
 	return &Detector{
-		poeHelperSessionStart: time.Now(),
+		hyprExiledSessionStart: time.Now(),
 		windowClasses:         []string{"steam_app_2694490"},
 		wmManager:             manager,
 		stopChan:              make(chan struct{}),
@@ -91,10 +91,10 @@ func (d *Detector) CheckLogLineValidity(lineTimestamp time.Time, line string) bo
 	}
 
 	// If line is before app started, reject
-	if lineTimestamp.Before(d.poeHelperSessionStart) {
+	if lineTimestamp.Before(d.hyprExiledSessionStart) {
 		log.Debug("Rejecting line - before app start",
 			"line_time", lineTimestamp,
-			"app_start_time", d.poeHelperSessionStart)
+			"app_start_time", d.hyprExiledSessionStart)
 		return false
 	}
 

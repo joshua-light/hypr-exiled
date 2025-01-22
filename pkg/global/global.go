@@ -1,9 +1,9 @@
 package global
 
 import (
-	"poe-helper/pkg/config"
-	"poe-helper/pkg/logger"
-	"poe-helper/pkg/notify"
+	"hypr-exiled/pkg/config"
+	"hypr-exiled/pkg/logger"
+	"hypr-exiled/pkg/notify"
 	"sync"
 )
 

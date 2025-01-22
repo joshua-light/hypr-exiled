@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"poe-helper/pkg/global"
-	"poe-helper/pkg/notify"
+	"hypr-exiled/pkg/global"
+	"hypr-exiled/pkg/notify"
 )
 
 type Hyprland struct {

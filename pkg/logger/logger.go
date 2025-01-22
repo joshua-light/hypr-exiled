@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	DefaultLogDir  = "~/.local/share/poe-helper/logs"
+	DefaultLogDir  = "~/.local/share/hypr-exiled/logs"
 	DefaultLogFile = "debug.log"
 )
 

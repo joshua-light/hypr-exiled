@@ -1,4 +1,4 @@
-module poe-helper
+module hypr-exiled
 
 go 1.23.3
 

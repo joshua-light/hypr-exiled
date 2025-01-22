@@ -9,10 +9,10 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"poe-helper/internal/app"
-	"poe-helper/pkg/config"
-	"poe-helper/pkg/global"
-	"poe-helper/pkg/logger"
+	"hypr-exiled/internal/app"
+	"hypr-exiled/pkg/config"
+	"hypr-exiled/pkg/global"
+	"hypr-exiled/pkg/logger"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 	}
 	defer log.Close()
 
-	log.Info("Starting POE Helper",
+	log.Info("Starting Hypr Exiled",
 		"version", "1.0.0",
 		"pid", os.Getpid(),
 		"os", runtime.GOOS,
@@ -68,10 +68,10 @@ func main() {
 	log.Debug("Global instances initialized successfully")
 
 	// Create and start the application
-	log.Debug("Creating POE Helper instance")
-	app, err := app.NewPOEHelper()
+	log.Debug("Creating Hypr Exiled instance")
+	app, err := app.NewHyprExiled()
 	if err != nil {
-		log.Fatal("Failed to create POE Helper", err)
+		log.Fatal("Failed to create Hypr Exiled", err)
 	}
 
 	log.Info("Starting application")

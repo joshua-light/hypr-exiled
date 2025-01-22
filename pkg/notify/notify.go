@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"os/exec"
 
-	"poe-helper/pkg/logger"
+	"hypr-exiled/pkg/logger"
 )
 
 // NotificationType represents the type of notification
 type NotificationType int
 
-const DefaultTitle = "PoE Helper"
+const DefaultTitle = "Hypr Exiled"
 
 const (
 	Error NotificationType = iota

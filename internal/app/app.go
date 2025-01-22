@@ -7,25 +7,25 @@ import (
 	"os/signal"
 	"syscall"
 
-	"poe-helper/internal/models"
-	"poe-helper/internal/poe/log"
-	"poe-helper/internal/trade_manager"
-	"poe-helper/pkg/global"
-	"poe-helper/pkg/notify"
+	"hypr-exiled/internal/models"
+	poe_log "hypr-exiled/internal/poe/log"
+	"hypr-exiled/internal/trade_manager"
+	"hypr-exiled/pkg/global"
+	"hypr-exiled/pkg/notify"
 )
 
-type POEHelper struct {
+type HyprExiled struct {
 	entries       []models.TradeEntry
 	poeLogWatcher *poe_log.LogWatcher
 	tradeManager  *trade_manager.TradeManager
 }
 
-func NewPOEHelper() (*POEHelper, error) {
+func NewHyprExiled() (*HyprExiled, error) {
 	log := global.GetLogger()
 	config := global.GetConfig()
 
-	log.Info("Creating new POE Helper instance")
-	log.Debug("Initializing POEHelper",
+	log.Info("Creating new Hypr Exiled instance")
+	log.Debug("Initializing HyprExiled",
 		"log_path", config.PoeLogPath,
 		"notify_command", config.NotifyCommand,
 		"trigger_count", len(config.CompiledTriggers))
@@ -40,7 +40,7 @@ func NewPOEHelper() (*POEHelper, error) {
 	// Initialize trade manager first since other components depend on it
 	tradeManager := trade_manager.NewTradeManager()
 
-	helper := &POEHelper{
+	helper := &HyprExiled{
 		entries:      make([]models.TradeEntry, 0),
 		tradeManager: tradeManager,
 	}
@@ -78,14 +78,14 @@ func checkDependencies() error {
 	return nil
 }
 
-func (p *POEHelper) Run() error {
+func (p *HyprExiled) Run() error {
 	notifier := global.GetNotifier()
 	log := global.GetLogger()
 
-	log.Info("Starting POE Helper service")
+	log.Info("Starting Hypr Exiled service")
 	log.Debug("Initializing service components")
 
-	if err := notifier.Show("POE Helper started", notify.Info); err != nil {
+	if err := notifier.Show("Hypr Exiled started", notify.Info); err != nil {
 		log.Error("Startup notification failed",
 			err,
 			"notification_type", "startup")
@@ -107,17 +107,17 @@ func (p *POEHelper) Run() error {
 	return p.Stop()
 }
 
-func (p *POEHelper) Stop() error {
+func (p *HyprExiled) Stop() error {
 	log := global.GetLogger()
 
-	log.Info("Initiating POE Helper shutdown")
+	log.Info("Initiating Hypr Exiled shutdown")
 
 	if p.poeLogWatcher != nil {
 		log.Debug("Stopping log watcher")
 		p.poeLogWatcher.Stop()
 	}
 
-	log.Info("POE Helper shutdown complete",
+	log.Info("Hypr Exiled shutdown complete",
 		"status", "stopped",
 		"processed_entries", len(p.entries))
 	return nil
@@ -136,7 +136,7 @@ func waitForShutdown() {
 		"signal", sig.String())
 }
 
-func (p *POEHelper) handleTradeEntry(entry models.TradeEntry) {
+func (p *HyprExiled) handleTradeEntry(entry models.TradeEntry) {
 	log := global.GetLogger()
 
 	if err := p.tradeManager.AddTrade(entry); err != nil {

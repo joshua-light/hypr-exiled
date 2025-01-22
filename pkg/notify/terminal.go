@@ -56,7 +56,7 @@ func (n *NotifyService) writeToLogFile(title string, message string, nType Notif
 		typeStr = "ERROR"
 	}
 
-	logPath := fmt.Sprintf("%s/.poe-helper-notifications.log", homeDir)
+	logPath := fmt.Sprintf("%s/.hypr-exiled-notifications.log", homeDir)
 	logMessage := fmt.Sprintf("[%s] %s - %s: %s\n",
 		time.Now().Format("2006-01-02 15:04:05"),
 		title,
