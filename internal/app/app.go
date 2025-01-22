@@ -145,5 +145,4 @@ func (p *POEHelper) handleTradeEntry(entry models.TradeEntry) {
 			"player", entry.PlayerName,
 			"item", entry.ItemName)
 	}
-	p.tradeManager.ShowTrades()
 }
