@@ -19,7 +19,7 @@ var notificationTools = []notificationTool{
 				urgency = "critical"
 				title += " Error"
 			}
-			return exec.Command(tool, "-u", urgency, title, message)
+			return exec.Command(tool, "-u", urgency, "-t", "5000", title, message)
 		},
 	},
 	{

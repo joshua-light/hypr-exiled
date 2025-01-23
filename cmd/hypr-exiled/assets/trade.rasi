@@ -1,0 +1,96 @@
+* {
+    bg-col:  #24273a;
+    bg-col-light: #24273a;
+    border-col: #24273a;
+    selected-col: #363a4f;
+    blue: #8aadf4;
+    fg-col: #cad3f5;
+    fg-col2: #ed8796;
+    grey: #6e738d;
+    teal: #8bd5ca;
+
+    background-color: @bg-col;
+    text-color: @fg-col;
+    font: "JetBrainsMono Nerd Font 12";
+    border-radius: 15px;
+}
+
+configuration {
+    show-icons: true;
+    disable-history: true;
+    sidebar-mode: false;
+    hide-scrollbar: true;
+    display-dmenu: "";
+}
+
+window {
+    height: 360px;
+    width: 600px;
+    border: 2px;
+    border-color: @teal;
+    location: north;
+    anchor: north;
+    y-offset: 0px;
+}
+
+mainbox {
+  children: [listview, message];
+}
+
+inputbar {
+    enabled: false;
+}
+
+entry {
+    enabled: false;
+}
+
+prompt {
+    enabled: false;
+}
+
+listview {
+    border: 0px;
+    padding: 6px 0px;
+    margin: 10px 0px;
+    columns: 1;
+    lines: 8;
+    background-color: @bg-col;
+    spacing: 4px;
+}
+
+element {
+    padding: 8px;
+    spacing: 4px;
+    text-color: @fg-col;
+}
+
+element-icon selected {
+    background-color: transparent;
+    border-color: transparent;
+}
+
+element-text {
+    background-color: transparent;
+    text-color: inherit;
+    vertical-align: 0.5;
+}
+
+element selected {
+    background-color: @selected-col;
+    text-color: @teal;
+    border-radius: 8px;
+}
+
+message {
+    margin: 2px;
+    padding: 8px;
+    background-color: @bg-col-light;
+    border-radius: 8px;
+    font: "JetBrainsMono Nerd Font 10";
+}
+
+textbox {
+    text-color: @blue;
+    horizontal-align: 0.5;
+}

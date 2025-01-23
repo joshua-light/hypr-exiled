@@ -6,6 +6,7 @@ import (
 	"hypr-exiled/internal/rofi"
 	"hypr-exiled/internal/storage"
 	"hypr-exiled/pkg/logger"
+	"hypr-exiled/pkg/notify"
 )
 
 type RofiConfig struct {
@@ -22,10 +23,11 @@ type Trade struct {
 }
 
 type TradeManager struct {
-	db   *storage.DB
-	rofi *rofi.TradeDisplayManager
-	mu   sync.RWMutex
-	log  *logger.Logger
+	db     *storage.DB
+	rofi   *rofi.TradeDisplayManager
+	mu     sync.RWMutex
+	log    *logger.Logger
+	notify *notify.NotifyService
 }
 
 type Currency struct {

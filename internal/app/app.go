@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"hypr-exiled/internal/ipc"
 	"hypr-exiled/internal/models"
 	poe_log "hypr-exiled/internal/poe/log"
 	"hypr-exiled/internal/trade_manager"
@@ -83,6 +84,8 @@ func (p *HyprExiled) Run() error {
 
 	log.Info("Starting Hypr Exiled service")
 	log.Debug("Initializing service components")
+	log.Info("Starting IPC socket server")
+	go ipc.StartSocketServer(p.TradeManager)
 
 	if err := notifier.Show("Hypr Exiled started", notify.Info); err != nil {
 		log.Error("Startup notification failed",

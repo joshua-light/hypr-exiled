@@ -241,6 +241,13 @@ func (c *Config) GetCurrencyIconPath(currencyType string) string {
 	return filepath.Join(c.AssetsDir, currencyType+".png")
 }
 
+func (c *Config) GetRofiThemePath() (string, error) {
+	c.log.Debug("Getting Rofi theme path")
+	themePath := filepath.Join(c.AssetsDir, "trade.rasi")
+	c.log.Debug("Using default Rofi theme", "path", themePath)
+	return themePath, nil
+}
+
 func (c *Config) setupAssets(configDir string, embeddedAssets embed.FS) error {
 	c.log.Debug("Setting up assets directory")
 
@@ -270,7 +277,8 @@ func (c *Config) setupAssets(configDir string, embeddedAssets embed.FS) error {
 
 		// Check if file already exists
 		if _, err := os.Stat(destFile); err == nil {
-			continue // Skip if file exists
+			c.log.Debug("Asset file exists, skipping", "file", destFile)
+			continue
 		}
 
 		// Read embedded file

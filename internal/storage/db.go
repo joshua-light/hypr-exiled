@@ -150,6 +150,14 @@ func (d *DB) RemoveTrades(trades []models.TradeEntry) error {
 	return tx.Commit()
 }
 
+func (d *DB) RemoveTradesByPlayer(playerName string) error {
+	_, err := d.db.Exec("DELETE FROM trades WHERE player_name = ?", playerName)
+	if err != nil {
+		return fmt.Errorf("failed to delete trades for player %s: %w", playerName, err)
+	}
+	return nil
+}
+
 func (d *DB) Cleanup(olderThan time.Duration) error {
 	cutoff := time.Now().Add(-olderThan)
 	_, err := d.db.Exec("DELETE FROM trades WHERE created_at < ?", cutoff)
