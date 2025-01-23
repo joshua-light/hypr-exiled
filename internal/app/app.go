@@ -17,7 +17,7 @@ import (
 type HyprExiled struct {
 	entries       []models.TradeEntry
 	poeLogWatcher *poe_log.LogWatcher
-	tradeManager  *trade_manager.TradeManager
+	TradeManager  *trade_manager.TradeManager
 }
 
 func NewHyprExiled() (*HyprExiled, error) {
@@ -37,12 +37,11 @@ func NewHyprExiled() (*HyprExiled, error) {
 		return nil, err
 	}
 
-	// Initialize trade manager first since other components depend on it
 	tradeManager := trade_manager.NewTradeManager()
 
 	helper := &HyprExiled{
 		entries:      make([]models.TradeEntry, 0),
-		tradeManager: tradeManager,
+		TradeManager: tradeManager, // Use TradeManager (uppercase T)
 	}
 
 	log.Debug("Creating log watcher instance")
@@ -139,12 +138,10 @@ func waitForShutdown() {
 func (p *HyprExiled) handleTradeEntry(entry models.TradeEntry) {
 	log := global.GetLogger()
 
-	if err := p.tradeManager.AddTrade(entry); err != nil {
+	if err := p.TradeManager.AddTrade(entry); err != nil {
 		log.Error("Failed to process trade in manager",
 			err,
 			"player", entry.PlayerName,
 			"item", entry.ItemName)
 	}
-
-	p.tradeManager.ShowTrades()
 }

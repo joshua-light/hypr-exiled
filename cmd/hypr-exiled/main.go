@@ -22,6 +22,7 @@ func main() {
 	// Parse command line flags
 	configPath := flag.String("config", "", "path to config file")
 	debug := flag.Bool("debug", false, "enable debug logging")
+	showTrades := flag.Bool("showTrades", false, "show the trades UI")
 	flag.Parse()
 
 	// Setup logging level
@@ -70,6 +71,19 @@ func main() {
 	log.Debug("Initializing global instances")
 	global.InitGlobals(config, log)
 	log.Debug("Global instances initialized successfully")
+
+	// Handle showTrades command
+	if *showTrades {
+		log.Info("Showing trades UI")
+		app, err := app.NewHyprExiled()
+		if err != nil {
+			log.Fatal("Failed to create Hypr Exiled", err)
+		}
+		if err := app.TradeManager.ShowTrades(); err != nil {
+			log.Fatal("Failed to show trades", err)
+		}
+		return
+	}
 
 	// Create and start the application
 	log.Debug("Creating Hypr Exiled instance")
