@@ -14,15 +14,14 @@ import (
 // Detector handles POE window detection
 type Detector struct {
 	hyprExiledSessionStart time.Time
-	lastResetTimestamp    time.Time
-	windowFoundTime       time.Time
-	isWindowActive        bool
-	mu                    sync.RWMutex
-	windowClasses         []string
-	windowTitles          []string
-	wmManager             *wm.Manager
-	stopChan              chan struct{}
-	stopped               bool
+	lastResetTimestamp     time.Time
+	windowFoundTime        time.Time
+	isWindowActive         bool
+	mu                     sync.RWMutex
+	windowClasses          []string
+	wmManager              *wm.Manager
+	stopChan               chan struct{}
+	stopped                bool
 }
 
 // NewDetector creates a new POE window detector
@@ -37,9 +36,9 @@ func NewDetector() *Detector {
 
 	return &Detector{
 		hyprExiledSessionStart: time.Now(),
-		windowClasses:         []string{"steam_app_2694490"},
-		wmManager:             manager,
-		stopChan:              make(chan struct{}),
+		windowClasses:          []string{"steam_app_2694490"},
+		wmManager:              manager,
+		stopChan:               make(chan struct{}),
 	}
 }
 

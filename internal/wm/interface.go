@@ -2,7 +2,7 @@ package wm
 
 // WindowManager interface defines the required methods for window managers
 type WindowManager interface {
-	// FindWindow looks for a window by class name or title
+	// FindWindow looks for a window by class name
 	FindWindow(classNames []string) (Window, error)
 	// FocusWindow brings the specified window to front
 	FocusWindow(Window) error

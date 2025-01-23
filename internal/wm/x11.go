@@ -28,7 +28,6 @@ func (x *X11) FindWindow(classNames []string) (Window, error) {
 			// Get the first window ID (first line)
 			windowID := strings.Split(strings.TrimSpace(string(out)), "\n")[0]
 
-			// Get window title
 			_, err := exec.Command("xdotool", "getwindowname", windowID).Output()
 			if err == nil {
 				return Window{
