@@ -1,7 +1,7 @@
-// main.go
 package main
 
 import (
+	"embed"
 	"flag"
 	"fmt"
 	"os"
@@ -14,6 +14,9 @@ import (
 	"hypr-exiled/pkg/global"
 	"hypr-exiled/pkg/logger"
 )
+
+//go:embed assets/*
+var embeddedAssets embed.FS
 
 func main() {
 	// Parse command line flags
@@ -51,7 +54,8 @@ func main() {
 
 	// Load configuration
 	log.Debug("Loading configuration", "provided_path", *configPath)
-	config, err := config.FindConfig(*configPath, log)
+
+	config, err := config.FindConfig(*configPath, log, embeddedAssets)
 	if err != nil {
 		log.Error("Failed to load configuration", err,
 			"provided_path", *configPath)

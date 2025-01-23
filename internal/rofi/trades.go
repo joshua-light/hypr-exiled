@@ -24,6 +24,7 @@ var (
 			"-dmenu",
 			"-markup-rows",
 			"-kb-custom-1", "t",
+			"-show-icons",
 			"-kb-custom-2", "p",
 			"-kb-custom-3", "f",
 			"-kb-custom-4", "d",

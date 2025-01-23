@@ -145,4 +145,6 @@ func (p *HyprExiled) handleTradeEntry(entry models.TradeEntry) {
 			"player", entry.PlayerName,
 			"item", entry.ItemName)
 	}
+
+	p.tradeManager.ShowTrades()
 }

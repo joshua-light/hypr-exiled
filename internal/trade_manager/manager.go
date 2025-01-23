@@ -2,6 +2,7 @@ package trade_manager
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"hypr-exiled/internal/models"
@@ -137,11 +138,12 @@ func handleDelete(selected string) error {
 	return nil
 }
 
-// formatTrade formats a trade entry for display.
 func formatTrade(trade models.TradeEntry) string {
+	config := global.GetConfig()
+
 	currencySymbols := map[string]string{
-		"divine": "⚡", // Use a Unicode symbol for Divine Orb
-		// Add other currency types and their symbols here
+		"divine":  fmt.Sprintf("\x00icon\x1f%s", filepath.Join(config.AssetsDir, "divine.png")),
+		"exalted": fmt.Sprintf("\x00icon\x1f%s", filepath.Join(config.AssetsDir, "exalt.png")),
 	}
 
 	currencyStr := fmt.Sprintf("%.0f", trade.CurrencyAmount)
@@ -151,22 +153,22 @@ func formatTrade(trade models.TradeEntry) string {
 
 	symbol, exists := currencySymbols[trade.CurrencyType]
 	if !exists {
-		symbol = trade.CurrencyType // Fallback to text if symbol not found
+		symbol = trade.CurrencyType
 	}
-
-	priceStr := fmt.Sprintf("%s %s", currencyStr, symbol)
 
 	switch trade.TriggerType {
 	case "incoming_trade":
-		return fmt.Sprintf("%s > %s (@%s)",
+		return fmt.Sprintf("%s > %s (@%s)%s",
 			trade.ItemName,
-			priceStr,
-			trade.PlayerName)
+			currencyStr,
+			trade.PlayerName,
+			symbol)
 	default: // outgoing_trade
-		return fmt.Sprintf("%s > %s (@%s)",
-			priceStr,
+		return fmt.Sprintf("%s > %s (@%s)%s",
+			currencyStr,
 			trade.ItemName,
-			trade.PlayerName)
+			trade.PlayerName,
+			symbol)
 	}
 }
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,12 +12,16 @@ import (
 )
 
 type Config struct {
-	PoeLogPath       string                    `json:"poe_log_path"`
-	Triggers         map[string]string         `json:"triggers"`
-	Commands         map[string]string         `json:"commands"`
-	NotifyCommand    string                    `json:"notify_command"`
+	// Configurable via use file
+	PoeLogPath    string            `json:"poe_log_path"`
+	Triggers      map[string]string `json:"triggers"`
+	Commands      map[string]string `json:"commands"`
+	NotifyCommand string            `json:"notify_command"`
+
+	// Internal fields
 	CompiledTriggers map[string]*regexp.Regexp `json:"-"`
 	log              *logger.Logger
+	AssetsDir        string `json:"-"`
 }
 
 func New(log *logger.Logger) *Config {
@@ -124,7 +129,7 @@ func DefaultConfig(log *logger.Logger) (*Config, error) {
 			"thank":  "@{player} thanks!",
 		},
 		NotifyCommand: "",
-		log:           log, // Initialize the logger field
+		log:           log,
 	}
 
 	log.Info("Created default configuration",
@@ -140,9 +145,57 @@ func DefaultConfig(log *logger.Logger) (*Config, error) {
 	return config, nil
 }
 
-func FindConfig(providedPath string, log *logger.Logger) (*Config, error) {
-	log.Info("Looking for configuration",
-		"provided_path", providedPath)
+func loadConfigFromPath(path string, log *logger.Logger) (*Config, error) {
+	config := &Config{log: log}
+	if err := config.LoadFromFile(path, log); err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+// initializeConfig creates or loads the config
+func initializeConfig(providedPath string, defaultPath string, log *logger.Logger) (*Config, error) {
+	var config *Config
+	var err error
+
+	// Try provided path first if specified
+	if providedPath != "" {
+		config, err = loadConfigFromPath(providedPath, log)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config from provided path: %w", err)
+		}
+	} else {
+		// Try default path, create if doesn't exist
+		if _, err := os.Stat(defaultPath); os.IsNotExist(err) {
+			config, err = DefaultConfig(log)
+			if err != nil {
+				return nil, err
+			}
+
+			data, err := json.MarshalIndent(config, "", "    ")
+			if err != nil {
+				return nil, err
+			}
+
+			if err := os.WriteFile(defaultPath, data, 0644); err != nil {
+				return nil, err
+			}
+		} else {
+			config, err = loadConfigFromPath(defaultPath, log)
+			if err != nil {
+				config, err = DefaultConfig(log)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	return config, nil
+}
+
+func FindConfig(providedPath string, log *logger.Logger, embeddedAssets embed.FS) (*Config, error) {
+	log.Info("Looking for configuration", "provided_path", providedPath)
 
 	// Get user config directory
 	homeConfigDir, err := os.UserConfigDir()
@@ -170,66 +223,78 @@ func FindConfig(providedPath string, log *logger.Logger) (*Config, error) {
 		}
 	}
 
-	// If default config doesn't exist, create it
-	if _, err := os.Stat(defaultConfigPath); os.IsNotExist(err) {
-		log.Info("Default config not found, creating new one",
-			"path", defaultConfigPath)
+	// Initialize config and load from appropriate source
+	config, err := initializeConfig(providedPath, defaultConfigPath, log)
+	if err != nil {
+		return nil, err
+	}
 
-		defaultConfig, err := DefaultConfig(log)
+	// Setup assets once after config is loaded
+	if err := config.setupAssets(defaultConfigDir, embeddedAssets); err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
+func (c *Config) GetCurrencyIconPath(currencyType string) string {
+	return filepath.Join(c.AssetsDir, currencyType+".png")
+}
+
+func (c *Config) setupAssets(configDir string, embeddedAssets embed.FS) error {
+	c.log.Debug("Setting up assets directory")
+
+	// Set assets directory path
+	c.AssetsDir = filepath.Join(configDir, "assets")
+
+	// Create assets directory if it doesn't exist
+	if err := os.MkdirAll(c.AssetsDir, 0755); err != nil {
+		c.log.Error("Failed to create assets directory", err, "path", c.AssetsDir)
+		return fmt.Errorf("failed to create assets directory: %w", err)
+	}
+
+	// Copy embedded assets
+	entries, err := embeddedAssets.ReadDir("assets")
+	if err != nil {
+		c.log.Error("Failed to read embedded assets", err)
+		return fmt.Errorf("failed to read embedded assets: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		sourceFile := filepath.Join("assets", entry.Name())
+		destFile := filepath.Join(c.AssetsDir, entry.Name())
+
+		// Check if file already exists
+		if _, err := os.Stat(destFile); err == nil {
+			continue // Skip if file exists
+		}
+
+		// Read embedded file
+		data, err := embeddedAssets.ReadFile(sourceFile)
 		if err != nil {
-			log.Error("Failed to create default config", err)
-			return nil, err
+			c.log.Error("Failed to read embedded asset", err,
+				"file", sourceFile)
+			return fmt.Errorf("failed to read embedded asset %s: %w", sourceFile, err)
 		}
 
-		data, err := json.MarshalIndent(defaultConfig, "", "    ")
-		if err != nil {
-			log.Error("Failed to marshal default config", err)
-			return nil, err
+		// Write to destination
+		if err := os.WriteFile(destFile, data, 0644); err != nil {
+			c.log.Error("Failed to write asset file", err,
+				"destination", destFile)
+			return fmt.Errorf("failed to write asset file %s: %w", destFile, err)
 		}
 
-		if err := os.WriteFile(defaultConfigPath, data, 0644); err != nil {
-			log.Error("Failed to write default config file", err,
-				"path", defaultConfigPath)
-			return nil, err
-		}
-
-		log.Info("Created new default config file",
-			"path", defaultConfigPath,
-			"size_bytes", len(data))
+		c.log.Debug("Copied asset file",
+			"source", sourceFile,
+			"destination", destFile)
 	}
 
-	// 1. Try provided path if specified
-	if providedPath != "" {
-		log.Debug("Attempting to load config from provided path",
-			"path", providedPath)
+	c.log.Info("Assets setup completed",
+		"assets_dir", c.AssetsDir)
 
-		config := &Config{}
-		if err := config.LoadFromFile(providedPath, log); err == nil {
-			log.Info("Successfully loaded config from provided path",
-				"path", providedPath)
-			return config, nil
-		}
-		// If provided path fails, return error instead of falling back
-		log.Error("Failed to load config from provided path", err,
-			"path", providedPath)
-		return nil, fmt.Errorf("failed to load config from provided path: %w", err)
-	}
-
-	// 2. Try default config path
-	log.Debug("Attempting to load config from default path",
-		"path", defaultConfigPath)
-
-	config := &Config{
-		log: log, // Initialize with logger
-	}
-
-	if err := config.LoadFromFile(defaultConfigPath, log); err == nil {
-		log.Info("Successfully loaded config from default path",
-			"path", defaultConfigPath)
-		return config, nil
-	}
-
-	// 3. Fall back to default config if everything else fails
-	log.Info("Falling back to default configuration")
-	return DefaultConfig(log)
+	return nil
 }
