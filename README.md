@@ -6,7 +6,7 @@ A Path of Exile 2 trade manager designed for Hyprland, with support for X11 envi
 
 This project was created primarily for:
 
-- Operating systems with restricted AppImage support (like NixOS)
+- OS's with restricted AppImage support (like NixOS)
 - Users preferring keyboard-driven, minimal interfaces
 - Hyprland users wanting native integration
 
