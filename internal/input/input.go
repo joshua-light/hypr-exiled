@@ -3,7 +3,6 @@ package input
 import (
 	"fmt"
 	"github.com/go-vgo/robotgo"
-	"time"
 
 	"hypr-exiled/pkg/global"
 	"hypr-exiled/pkg/logger"
@@ -41,18 +40,14 @@ func (i *Input) ExecutePoECommands(commands []string) error {
 	if err := i.windowManager.FocusWindow(window); err != nil {
 		return fmt.Errorf("failed to focus window: %w", err)
 	}
-	time.Sleep(100 * time.Millisecond)
 	for _, cmd := range commands {
 		i.log.Debug("Executing PoE command",
 			"command", cmd,
 			"window_class", window.Class)
 
 		robotgo.KeyTap("enter")
-		time.Sleep(50 * time.Millisecond)
 		robotgo.TypeStr(cmd)
-		time.Sleep(50 * time.Millisecond)
 		robotgo.KeyTap("enter")
-		time.Sleep(50 * time.Millisecond)
 	}
 	return nil
 }

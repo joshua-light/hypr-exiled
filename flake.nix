@@ -17,6 +17,7 @@
             gopls
             gotools
             go-tools
+            pkg-config
 
             xorg.libX11.dev
             xorg.libXi
@@ -24,6 +25,7 @@
             xorg.libXfixes
             xorg.libXext
             xorg.libXtst
+            alsa-lib
 
             rofi
           ];

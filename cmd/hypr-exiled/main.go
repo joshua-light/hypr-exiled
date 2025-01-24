@@ -77,7 +77,7 @@ func handleShowTrades(log *logger.Logger, configPath string) {
 
 	// Initialize global state (config, logger, and notifier)
 	log.Debug("Initializing global notifier")
-	global.InitGlobals(config, log)
+	global.InitGlobals(config, log, embeddedAssets)
 
 	// Send the showTrades command to the background service
 	resp, err := ipc.SendCommand("showTrades")
@@ -113,7 +113,7 @@ func startBackgroundService(log *logger.Logger, configPath string) {
 
 	// Initialize globals
 	log.Debug("Initializing global instances")
-	global.InitGlobals(config, log)
+	global.InitGlobals(config, log, embeddedAssets)
 	log.Debug("Global instances initialized successfully")
 
 	// Create and start the application

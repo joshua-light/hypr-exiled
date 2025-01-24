@@ -10,10 +10,12 @@ require (
 
 require (
 	github.com/dblohm7/wingoes v0.0.0-20240820181039-f2b84150679e // indirect
+	github.com/ebitengine/oto/v3 v3.3.2 // indirect
 	github.com/ebitengine/purego v0.8.2 // indirect
 	github.com/gen2brain/shm v0.1.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/gopxl/beep/v2 v2.1.1 // indirect
 	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/kbinani/screenshot v0.0.0-20250118074034-a3924b7bbc8c // indirect
 	github.com/lufia/plan9stats v0.0.0-20240909124753-873cd0166683 // indirect
@@ -22,6 +24,7 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/otiai10/gosseract v2.2.1+incompatible // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/robotn/xgb v0.10.0 // indirect
 	github.com/robotn/xgbutil v0.10.0 // indirect

@@ -58,7 +58,6 @@ func NewTradeManager(detector *window.Detector) *TradeManager {
 
 func (tm *TradeManager) AddTrade(trade models.TradeEntry) error {
 	tm.log.Debug("Adding trade", "trade", trade)
-
 	if err := tm.db.AddTrade(trade); err != nil {
 		tm.log.Error("Failed to add trade", err)
 		return fmt.Errorf("failed to add trade: %w", err)
@@ -71,6 +70,13 @@ func (tm *TradeManager) AddTrade(trade models.TradeEntry) error {
 			trade.ItemName,
 			trade.CurrencyAmount,
 			trade.CurrencyType)
+
+		// Play notification sound for incoming trades
+		if notifier := global.GetSoundNotifier(); notifier != nil {
+			if err := notifier.PlayTradeSound(); err != nil {
+				tm.log.Error("Failed to play trade sound", err)
+			}
+		}
 	} else {
 		notificationMsg = fmt.Sprintf("Trade request for %s sent to @%s",
 			trade.ItemName,
