@@ -1,224 +1,120 @@
-# Hypr Exiled Documentation
+# Hypr Exiled
 
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [Installation](#installation)
-4. [Development](#development)
-5. [Testing](#testing)
-6. [Logging](#logging)
-7. [Troubleshooting](#troubleshooting)
-
-## Overview
-
-Hypr Exiled is a Go application designed to enhance Path of Exile 2 gameplay by providing automated responses to in-game events. It monitors the game's log file and provides a simple GUI for executing commands.
-
-### Key Features
-
-- Real-time log monitoring
-- Window manager agnostic design
-- Automated command execution
-- Cross-platform input simulation
-- Extensive logging for debugging
+A Path of Exile 2 trade manager designed for Hyprland, with support for X11 environments.
 
 ## Architecture
 
-### Component Overview
+Hypr Exiled operates as a client-server application:
 
+- **Background Service**: Monitors PoE logs and manages trades
+- **Trade UI**: Rofi-based interface for interacting with trades
+
+### Operation Flow
+
+1. Start background service: `hypr-exiled`
+2. Service monitors PoE logs for trades
+3. Access trade UI: `hypr-exiled --showTrades`
+4. UI communicates with service via Unix socket
+
+## Features
+
+- Real-time trade monitoring and management
+- Rofi-based trade interface
+- Automated trade responses
+- Cross-window-manager support (Hyprland/X11)
+
+## Dependencies
+
+- `rofi`: Trade UI display
+- `libX11`, `libXtst`, `libXi`, `libxcb`: Input simulation (required even on Wayland)
+- `go` 1.21+
+
+## Building and Running
+
+### Build
+
+```bash
+# Using Nix Flakes (recommended)
+# Make sure u have nix and nix flakes enabled
+nix develop
+go build -o hypr-exiled ./cmd/hypr-exiled
+
+# Manual Build
+go build -o hypr-exiled ./cmd/hypr-exiled
 ```
-hypr-exiled/
-├── cmd/
-│   └── hypr-exiled/
-│       └── main.go
-├── internal/
-│   ├── app/
-│   │   ├── app.go
-│   │   └── config.go
-│   ├── wm/
-│   │   ├── interface.go
-│   │   ├── hyprland.go
-│   │   └── x11.go
-│   └── input/
-│       └── simulator.go
-├── pkg/
-│   └── logger/
-│       └── logger.go
-├── test/
-│   └── fixtures/
-│       └── sample_logs/
-└── docs/
-    └── images/
+
+### Running
+
+1. Start background service:
+
+```bash
+./hypr-exiled
 ```
 
-### Key Components
+2. Show trade UI (requires service running):
 
-#### Window Manager Interface
+```bash
+./hypr-exiled --showTrades
+```
 
-The `wm.WindowManager` interface provides abstraction for different window managers:
+3. Enable debug logging:
+
+```bash
+./hypr-exiled --debug
+```
+
+Note: The background service must be running before using the `--showTrades` command. The service communicates with the UI through a Unix socket at `/tmp/hypr-exiled.sock`.
+
+## Documentation
+
+See individual module documentation for detailed information:
+
+- [Main Application](doc/main.md): Entry point and service management
+- [App Core](doc/app.md): Application lifecycle and trade handling
+- [IPC](doc/ipc.md): Inter-process communication
+- [POE Integration](doc/poe.md): Game log monitoring and window detection
+- [Window Management](doc/wm.md): Window manager abstraction
+- [Trade Manager](doc/trade-manager.md): Trade processing and UI
+- [Input](doc/input.md): Game input automation
+- [Rofi](doc/rofi.md): Trade UI implementation
+- [Storage](doc/storage.md): Trade data persistence
+- [Notify](doc/notify.md): System notifications
+
+## Window Manager Support
+
+Currently supports:
+
+- Hyprland (primary focus)
+- X11 (secondary support)
+
+Adding support for new window managers requires implementing the `WindowManager` interface:
 
 ```go
 type WindowManager interface {
-    FindWindow(classNames []string, titles []string) (Window, error)
+    FindWindow(classNames []string) (Window, error)
     FocusWindow(Window) error
     Name() string
 }
 ```
 
-#### Input Simulation
+## Development Environment
 
-Input simulation is handled through a platform-agnostic interface that supports both X11 and Wayland environments.
+The included `flake.nix` provides all necessary dependencies:
 
-#### Logging System
-
-The application uses structured logging with different log levels and outputs:
-
-- File logging for debugging
-- Console logging for development
-- Structured JSON logging for production
-
-## Installation
-
-### Prerequisites
-
-- Go 1.21 or higher
-- wtype (input simulation)
-- xdotool (optional, for X11 support)
-
-### Build from Source
-
-```bash
-# Clone repository
-git clone https://github.com/yourusername/hypr-exiled
-cd hypr-exiled
-
-# Install dependencies
-go mod download
-
-# Build
-go build -o hypr-exiled cmd/hypr-exiled/main.go
-
-# Run
-./hypr-exiled
+```nix
+nix develop
 ```
 
-### Development Setup
+### Included Development Tools
 
-1. Install development tools:
-
-```bash
-go install golang.org/x/tools/cmd/goimports@latest
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-```
-
-2. Set up pre-commit hooks:
-
-```bash
-#!/bin/sh
-go fmt ./...
-golangci-lint run
-go test ./...
-```
-
-## Development
-
-### Code Structure
-
-- `cmd/`: Application entrypoints
-- `internal/`: Private application code
-- `pkg/`: Public libraries
-- `test/`: Test files and fixtures
-
-### Logging
-
-The application uses different log levels:
-
-- `DEBUG`: Detailed debugging information
-- `INFO`: General operational information
-- `WARN`: Warning messages
-- `ERROR`: Error conditions
-- `FATAL`: Critical errors that require shutdown
-
-Example log setup:
-
-```go
-logger := log.NewLogger(
-    log.WithFile("hypr-exiled.log"),
-    log.WithConsole(),
-    log.WithLevel(log.DebugLevel),
-)
-```
-
-## Testing
-
-### Running Tests
-
-```bash
-# Run all tests
-go test ./...
-
-# Run tests with coverage
-go test -cover ./...
-
-# Generate coverage report
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-```
-
-### Test Categories
-
-1. Unit Tests: Test individual components
-2. Integration Tests: Test component interactions
-3. E2E Tests: Test complete workflows
-
-## Troubleshooting
-
-### Common Issues
-
-1. Window Detection Issues
-
-```
-ERROR: Failed to detect PoE2 window
-Solution: Check window class/title names using:
-- Hyprland: hyprctl clients -j
-- X11: xwininfo -root -tree
-```
-
-2. Input Simulation Issues
-
-```
-ERROR: Failed to simulate input
-Solution: Verify wtype installation and permissions
-```
-
-### Debugging
-
-Enable debug logging:
-
-```bash
-POE_HELPER_LOG_LEVEL=debug ./hypr-exiled
-```
-
-View logs:
-
-```bash
-tail -f ~/.local/share/hypr-exiled/logs/debug.log
-```
+- Go toolchain
+- X11/XCB libraries
+- Rofi
+- Required development headers
 
 ## Contributing
 
-### Pull Request Process
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit pull request
-
-### Code Style
-
-Follow Go standard practices:
-
-- Use `gofmt`
-- Follow [Effective Go](https://golang.org/doc/effective_go)
-- Add comments for exported functions
+1. Ensure all dependencies are installed
+2. Follow existing module documentation patterns
+3. Implement tests for new features
+4. Update relevant documentation
