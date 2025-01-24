@@ -1,7 +1,5 @@
 # Trade Manager Package
 
-## Core Components
-
 ### Types (`types.go`)
 
 ```go
