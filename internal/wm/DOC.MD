@@ -1,115 +1,103 @@
+# Window Management Package
+
+## Overview
+
+Handles window management operations across different desktop environments (X11, Hyprland).
+
+## Components
+
+### Core Interface (`interface.go`)
+```go
+type WindowManager interface {
+    FindWindow(classNames []string) (Window, error)
+    FocusWindow(Window) error
+    Name() string
+}
+```
+
+### Manager (`manager.go`)
+- Detects session type
+- Initializes appropriate WM
+- Provides unified interface
+
+### Implementations
+- **X11**: Uses xdotool
+- **Hyprland**: Uses hyprctl
+
+## Adding New WM Support
+
+1. **Create Implementation File**
+```go
 package wm
 
-import (
-	"encoding/json"
-	"fmt"
-	"os/exec"
-	"strings"
-	"time"
-
-	"hypr-exiled/pkg/global"
-	"hypr-exiled/pkg/notify"
-)
-
-type Hyprland struct {
-	hasLoggedWaiting bool
-	lastFoundWindow  Window
+type NewWM struct {
+    // WM-specific fields
 }
 
-func NewHyprland() (*Hyprland, error) {
-	log := global.GetLogger()
+func NewNewWM() (*NewWM, error) {
+    // Initialize WM
+    // Check dependencies
+    return &NewWM{}, nil
+}
+```
 
-	// Check if hyprctl is available
-	path, err := exec.LookPath("hyprctl")
-	if err != nil {
-		log.Error("hyprctl not found in PATH", err)
-		return nil, fmt.Errorf("hyprctl not found in PATH: %w", err)
-	}
-	log.Debug("Found hyprctl", "path", path)
-
-	return &Hyprland{}, nil
+2. **Implement Interface Methods**
+```go
+// Return WM name for logging
+func (w *NewWM) Name() string {
+    return "NewWM"
 }
 
-func (h *Hyprland) Name() string {
-	return "Hyprland"
+// Find window by class names
+func (w *NewWM) FindWindow(classNames []string) (Window, error) {
+    // Implement window search
+    // Return Window struct with appropriate fields
 }
 
-func (h *Hyprland) FindWindow(classNames []string) (Window, error) {
-	log := global.GetLogger()
-	notifier := global.GetNotifier()
-
-	// Create the command
-	cmd := exec.Command("hyprctl", "clients", "-j")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Error("Failed to execute hyprctl", err, "output", string(output))
-		return Window{}, fmt.Errorf("hyprctl error: %w", err)
-	}
-
-	if len(output) == 0 {
-		return Window{}, nil
-	}
-
-	var windows []struct {
-		Address string `json:"address"`
-		Class   string `json:"class"`
-	}
-
-	if err := json.Unmarshal(output, &windows); err != nil {
-		log.Error("Failed to parse hyprctl output", err, "output", string(output))
-		return Window{}, fmt.Errorf("failed to parse hyprctl output: %w", err)
-	}
-
-	// Search for matching window
-	for _, w := range windows {
-		// Check classes
-		for _, class := range classNames {
-			if strings.Contains(strings.ToLower(w.Class), strings.ToLower(class)) {
-				foundWindow := Window{
-					Class:   w.Class,
-					Address: w.Address,
-				}
-
-				// Only log if this is a different window than last time
-				if foundWindow != h.lastFoundWindow {
-					log.Debug("Found matching window by class",
-						"class", w.Class,
-						"address", w.Address)
-					h.lastFoundWindow = foundWindow
-				}
-
-				h.hasLoggedWaiting = false
-				return foundWindow, nil
-			}
-		}
-	}
-
-	// Reset last found window when no window is found
-	if h.lastFoundWindow != (Window{}) {
-		h.lastFoundWindow = Window{}
-	}
-
-	if !h.hasLoggedWaiting {
-		var message = "Waiting for PoE 2 Window..."
-		log.Info(message)
-		notifier.Show(message, notify.Info)
-		h.hasLoggedWaiting = true
-	}
-
-	return Window{}, nil
+// Focus specific window
+func (w *NewWM) FocusWindow(w Window) error {
+    // Implement window focus
+    // Add small delay after focus
 }
+```
 
-func (h *Hyprland) FocusWindow(w Window) error {
-	log := global.GetLogger()
-
-	log.Debug("Focusing window", "address", w.Address)
-
-	cmd := exec.Command("hyprctl", "dispatch", "focuswindow", "address:"+w.Address)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Error("Failed to focus window", err, "output", string(output))
-		return fmt.Errorf("failed to focus window: %w", err)
-	}
-
-	time.Sleep(100 * time.Millisecond)
-	return nil
+3. **Update Manager**
+```go
+func NewManager() (*Manager, error) {
+    switch sessionType {
+    case "new_session_type":
+        wm, err = NewNewWM()
+    }
 }
+```
+
+4. **Required Features**
+- Window class matching
+- Window focus capability
+- Error handling for missing dependencies
+- Session type detection
+- Proper cleanup/resource management
+- Logging integration
+- Thread safety if needed
+
+## Best Practices
+
+### Window Detection
+- Case-insensitive class matching
+- Clean error messages
+- Graceful handling of missing windows
+
+### Window Focus
+- Verify window exists before focus
+- Add delay after focus (100ms typical)
+- Handle focus errors gracefully
+
+### Error Handling
+- Check dependencies on startup
+- Validate window IDs/addresses
+- Provide context in error messages
+
+### Logging
+- Log WM initialization
+- Debug logs for window operations
+- Error details for failures
