@@ -2,18 +2,20 @@ package trade_manager
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"hypr-exiled/internal/input"
 	"hypr-exiled/internal/models"
+	"hypr-exiled/internal/poe/window"
 	"hypr-exiled/internal/rofi"
 	"hypr-exiled/internal/storage"
 	"hypr-exiled/pkg/global"
 	"hypr-exiled/pkg/notify"
 )
 
-func NewTradeManager() *TradeManager {
-	log := global.GetLogger()
-	notifier := global.GetNotifier()
+func NewTradeManager(detector *window.Detector) *TradeManager {
+	cfg, log, notifier := global.GetAll()
 
 	db, err := storage.New()
 	if err != nil {
@@ -27,11 +29,19 @@ func NewTradeManager() *TradeManager {
 		}
 	}()
 
+	inputManager, err := input.NewInput(detector)
+	if err != nil {
+		log.Fatal("Failed to initialize input manager", err)
+	}
+
 	// Create the TradeManager instance
 	tm := &TradeManager{
-		db:     db,
-		notify: notifier,
-		log:    log,
+		db:       db,
+		notify:   notifier,
+		input:    inputManager,
+		detector: detector,
+		cfg:      cfg,
+		log:      log,
 	}
 
 	// Initialize Rofi with handlers that have access to the TradeManager instance
@@ -77,6 +87,11 @@ func (tm *TradeManager) AddTrade(trade models.TradeEntry) error {
 }
 
 func (tm *TradeManager) ShowTrades() error {
+	if !tm.detector.IsActive() {
+		tm.notify.Show("PoE 2 Window not found, make sure PoE is open", notify.Info)
+		tm.log.Debug("PoE 2 window not found")
+		return nil
+	}
 	tm.log.Debug("Fetching trades from database")
 	trades, err := tm.db.GetTrades()
 	if err != nil {
@@ -92,10 +107,12 @@ func (tm *TradeManager) ShowTrades() error {
 
 	// Format trades for Rofi
 	var options []string
-	for _, trade := range trades {
-		formattedTrade := tm.rofi.FormatTrade(trade)
+	for i, trade := range trades {
+		formattedTrade := tm.rofi.FormatTrade(trade, i)
 		options = append(options, formattedTrade)
-		tm.log.Debug("Formatted trade", "trade", formattedTrade)
+		tm.log.Debug("Adding trade to options",
+			"index", i,
+			"player_name", trade.PlayerName)
 	}
 
 	tm.log.Info("Displaying trades in Rofi", "trade_count", len(trades))
@@ -108,32 +125,76 @@ func (tm *TradeManager) ShowTrades() error {
 }
 
 func (tm *TradeManager) handleTrade(selected string) error {
-	tm.log.Info("Trade action triggered", "selected", selected)
-	// Implement trade logic here
+	playerName, err := tm.rofi.ExtractPlayerName(selected)
+	if err != nil {
+		return fmt.Errorf("failed to extract player name: %w", err)
+	}
+
+	commands := tm.cfg.GetCommands()["trade"]
+	for i := range commands {
+		commands[i] = strings.ReplaceAll(commands[i], "{player}", playerName)
+	}
+
+	if err := tm.input.ExecutePoECommands(commands); err != nil {
+		return fmt.Errorf("failed to execute trade commands: %w", err)
+	}
+
 	return nil
 }
 
 func (tm *TradeManager) handleParty(selected string) error {
-	tm.log.Info("Party action triggered", "selected", selected)
-	// Implement party logic here
+	tm.log.Debug("Handling party request", "selected_trade", selected)
+
+	playerName, err := tm.rofi.ExtractPlayerName(selected)
+	if err != nil {
+		tm.log.Error("Failed to extract player name", err)
+		return fmt.Errorf("failed to extract player name: %w", err)
+	}
+
+	tm.log.Debug("Extracted player name for party", "player_name", playerName)
+
+	commands := tm.cfg.GetCommands()["party"]
+	tm.log.Debug("Original commands", "commands", commands) // Log original commands
+
+	for i := range commands {
+		originalCmd := commands[i]
+		commands[i] = strings.ReplaceAll(commands[i], "{player}", playerName)
+
+		tm.log.Debug("Preparing party command",
+			"original_command", originalCmd,
+			"modified_command", commands[i])
+	}
+
+	tm.log.Debug("Modified commands", "commands", commands) // Log modified commands
+
+	if err := tm.input.ExecutePoECommands(commands); err != nil {
+		tm.log.Error("Failed to execute party commands", err)
+		return fmt.Errorf("failed to execute party commands: %w", err)
+	}
+
 	return nil
 }
 
 func (tm *TradeManager) handleFinish(selected string) error {
-	tm.log.Info("Finish action triggered", "selected", selected)
-
 	playerName, err := tm.rofi.ExtractPlayerName(selected)
 	if err != nil {
-		tm.log.Error("Failed to extract player name", err, "selected", selected)
 		return fmt.Errorf("failed to extract player name: %w", err)
 	}
 
-	if err := tm.db.RemoveTradesByPlayer(playerName); err != nil {
-		tm.log.Error("Failed to delete trade", err, "player_name", playerName)
-		return fmt.Errorf("failed to delete trade: %w", err)
+	commands := tm.cfg.GetCommands()["finish"]
+	for i := range commands {
+		commands[i] = strings.ReplaceAll(commands[i], "{player}", playerName)
 	}
 
-	tm.log.Info("Trade marked as finished and removed from the database", "player_name", playerName)
+	if err := tm.input.ExecutePoECommands(commands); err != nil {
+		return fmt.Errorf("failed to execute finish commands: %w", err)
+	}
+
+	// Remove trade from database
+	if err := tm.db.RemoveTradesByPlayer(playerName); err != nil {
+		return fmt.Errorf("failed to remove trades: %w", err)
+	}
+
 	return nil
 }
 

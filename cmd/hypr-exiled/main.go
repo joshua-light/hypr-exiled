@@ -107,9 +107,9 @@ func startBackgroundService(log *logger.Logger, configPath string) {
 		os.Exit(1)
 	}
 	log.Info("Configuration loaded successfully",
-		"poe_log_path", config.PoeLogPath,
-		"trigger_count", len(config.Triggers),
-		"command_count", len(config.Commands))
+		"poe_log_path", config.GetPoeLogPath(),
+		"trigger_count", len(config.GetTriggers()),
+		"command_count", len(config.GetCommands()))
 
 	// Initialize globals
 	log.Debug("Initializing global instances")

@@ -24,7 +24,7 @@ func InitGlobals(config *config.Config, logger *logger.Logger) {
 
 		cfg = config
 		log = logger
-		notifier = notify.NewNotifyService(config.NotifyCommand, logger)
+		notifier = notify.NewNotifyService(config.GetNotifyCommand(), logger)
 	})
 }
 

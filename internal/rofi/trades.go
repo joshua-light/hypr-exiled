@@ -7,6 +7,7 @@ import (
 	"hypr-exiled/pkg/logger"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -34,7 +35,7 @@ var (
 	}
 
 	TradeConfig = Config{
-		Args:    []string{}, // Will be populated in NewTradeDisplayManager
+		Args:    []string{},
 		Message: "T (trade) | P (party) | F (finish) | D (delete)",
 	}
 )
@@ -75,12 +76,13 @@ func NewTradeDisplayManager(tradeHandler, partyHandler, finishHandler, deleteHan
 	}
 }
 
-func (d *TradeDisplayManager) FormatTrade(trade models.TradeEntry) string {
+func (d *TradeDisplayManager) FormatTrade(trade models.TradeEntry, index int) string {
 	config := global.GetConfig()
+	log := global.GetLogger()
 
 	currencySymbols := map[string]string{
-		"divine":  fmt.Sprintf("\x00icon\x1f%s", filepath.Join(config.AssetsDir, "divine.png")),
-		"exalted": fmt.Sprintf("\x00icon\x1f%s", filepath.Join(config.AssetsDir, "exalt.png")),
+		"divine":  fmt.Sprintf("\x00icon\x1f%s", filepath.Join(config.GetAssetsDir(), "divine.png")),
+		"exalted": fmt.Sprintf("\x00icon\x1f%s", filepath.Join(config.GetAssetsDir(), "exalt.png")),
 	}
 
 	currencyStr := fmt.Sprintf("%.0f", trade.CurrencyAmount)
@@ -98,37 +100,41 @@ func (d *TradeDisplayManager) FormatTrade(trade models.TradeEntry) string {
 		symbol = trade.CurrencyType
 	}
 
-	switch trade.TriggerType {
-	case "incoming_trade":
-		return fmt.Sprintf("%s %s > %s&#x0a;@%s%s",
-			currencyStr,
-			currencyName,
-			trade.ItemName,
-			trade.PlayerName,
-			symbol)
-	default: // outgoing_trade
-		return fmt.Sprintf("%s %s > %s&#x0a;@%s%s",
-			currencyStr,
-			currencyName,
-			trade.ItemName,
-			trade.PlayerName,
-			symbol)
-	}
+	formattedTrade := fmt.Sprintf("[%d] %s %s > %s&#x0a;@%s%s",
+		index, // Add an index to uniquely identify the trade
+		currencyStr,
+		currencyName,
+		trade.ItemName,
+		trade.PlayerName,
+		symbol)
+
+	log.Debug("Formatted trade with index",
+		"index", index,
+		"player_name", trade.PlayerName,
+		"trigger_type", trade.TriggerType)
+
+	return formattedTrade
 }
 
-// ExtractPlayerName extracts the player name from the selected Rofi string.
 func (d *TradeDisplayManager) ExtractPlayerName(selected string) (string, error) {
-	parts := strings.Split(selected, "(@")
-	if len(parts) < 2 {
+	log := global.GetLogger()
+
+	re := regexp.MustCompile(`\[\d+\] .*&#x0a;@([^\s]+)`)
+	matches := re.FindStringSubmatch(selected)
+
+	if len(matches) < 2 {
+		log.Error("Failed to extract player name",
+			fmt.Errorf("invalid selected string format: %s", selected))
 		return "", fmt.Errorf("invalid selected string format: %s", selected)
 	}
 
-	playerPart := strings.Split(parts[1], ")")
-	if len(playerPart) < 1 {
-		return "", fmt.Errorf("invalid selected string format: %s", selected)
-	}
+	playerName := matches[1]
 
-	return playerPart[0], nil
+	log.Debug("Extracted trade details",
+		"player_name", playerName,
+		"selected_string", selected)
+
+	return playerName, nil
 }
 
 // DisplayTrades displays the trades in a Rofi menu.

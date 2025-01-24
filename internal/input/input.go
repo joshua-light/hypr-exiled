@@ -1,19 +1,58 @@
 package input
 
 import (
+	"fmt"
 	"github.com/go-vgo/robotgo"
+	"time"
+
+	"hypr-exiled/pkg/global"
+	"hypr-exiled/pkg/logger"
+	"hypr-exiled/pkg/notify"
+
+	"hypr-exiled/internal/poe/window"
+	"hypr-exiled/internal/wm"
 )
 
-// ExecuteInput simulates typing a command and pressing Enter before and after.
-func ExecuteInput(cmd string) error {
-	// Simulate pressing the Enter key
-	robotgo.KeyTap("enter")
+type Input struct {
+	windowManager *wm.Manager
+	detector      *window.Detector
+	log           *logger.Logger
+	notifier      *notify.NotifyService
+}
 
-	// Type the command
-	robotgo.TypeStr(cmd)
+func NewInput(detector *window.Detector) (*Input, error) {
+	log := global.GetLogger()
+	notifier := global.GetNotifier()
 
-	// Simulate pressing the Enter key again
-	robotgo.KeyTap("enter")
+	return &Input{
+		windowManager: detector.GetCurrentWm(),
+		detector:      detector,
+		log:           log,
+		notifier:      notifier,
+	}, nil
+}
 
+func (i *Input) ExecutePoECommands(commands []string) error {
+	if !i.detector.IsActive() {
+		i.log.Debug("PoE 2 Window not found")
+		return nil
+	}
+	window := i.detector.GetCurrentWindow()
+	if err := i.windowManager.FocusWindow(window); err != nil {
+		return fmt.Errorf("failed to focus window: %w", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	for _, cmd := range commands {
+		i.log.Debug("Executing PoE command",
+			"command", cmd,
+			"window_class", window.Class)
+
+		robotgo.KeyTap("enter")
+		time.Sleep(50 * time.Millisecond)
+		robotgo.TypeStr(cmd)
+		time.Sleep(50 * time.Millisecond)
+		robotgo.KeyTap("enter")
+		time.Sleep(50 * time.Millisecond)
+	}
 	return nil
 }

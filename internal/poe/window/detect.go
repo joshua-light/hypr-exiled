@@ -17,6 +17,7 @@ type Detector struct {
 	lastResetTimestamp     time.Time
 	windowFoundTime        time.Time
 	isWindowActive         bool
+	currentWindow          wm.Window
 	mu                     sync.RWMutex
 	windowClasses          []string
 	wmManager              *wm.Manager
@@ -56,15 +57,13 @@ func (d *Detector) Detect() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	d.currentWindow = window // Store window
 	isActive := window != wm.Window{}
 
-	// Window state changed
 	if isActive != d.isWindowActive {
 		if isActive {
 			d.windowFoundTime = time.Now()
-			log.Info("PoE window found",
-				"class", window.Class,
-			)
+			log.Info("PoE window found", "class", window.Class)
 			notifier.Show("PoE window found, monitoring trades...", notify.Info)
 		} else {
 			log.Info("PoE window lost")
@@ -166,6 +165,24 @@ func (d *Detector) Start() error {
 
 	log.Info("Window detector started")
 	return nil
+}
+
+func (d *Detector) GetCurrentWindow() wm.Window {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.currentWindow
+}
+
+func (d *Detector) GetCurrentWm() *wm.Manager {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.wmManager
+}
+
+func (d *Detector) IsActive() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.isWindowActive
 }
 
 // Stop stops the window detection loop

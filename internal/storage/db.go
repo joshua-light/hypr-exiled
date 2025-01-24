@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hypr-exiled/internal/models"
+	"hypr-exiled/pkg/global"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -93,16 +94,21 @@ func (d *DB) AddTrade(trade models.TradeEntry) error {
 }
 
 func (d *DB) GetTrades() ([]models.TradeEntry, error) {
+	log := global.GetLogger()
+	log.Debug("Retrieving trades from database")
+
 	query := `
-		SELECT timestamp, trigger_type, player_name, item_name, league,
-			   currency_amount, currency_type, stash_tab,
-			   position_left, position_top, message
-		FROM trades
-		ORDER BY timestamp DESC
-	`
+        SELECT timestamp, trigger_type, player_name, item_name, league,
+               currency_amount, currency_type, stash_tab,
+               position_left, position_top, message,
+               created_at
+        FROM trades
+        ORDER BY timestamp DESC
+    `
 
 	rows, err := d.db.Query(query)
 	if err != nil {
+		log.Error("Failed to query trades", err)
 		return nil, fmt.Errorf("failed to query trades: %w", err)
 	}
 	defer rows.Close()
@@ -110,19 +116,29 @@ func (d *DB) GetTrades() ([]models.TradeEntry, error) {
 	var trades []models.TradeEntry
 	for rows.Next() {
 		var trade models.TradeEntry
-		var timestamp time.Time
+		var timestamp, createdAt time.Time
 		err := rows.Scan(
 			&timestamp, &trade.TriggerType, &trade.PlayerName,
 			&trade.ItemName, &trade.League, &trade.CurrencyAmount,
 			&trade.CurrencyType, &trade.StashTab, &trade.Position.Left,
-			&trade.Position.Top, &trade.Message)
+			&trade.Position.Top, &trade.Message, &createdAt)
 		if err != nil {
+			log.Error("Failed to scan trade", err)
 			return nil, fmt.Errorf("failed to scan trade: %w", err)
 		}
 		trade.Timestamp = timestamp
+
+		log.Debug("Retrieved trade",
+			"player_name", trade.PlayerName,
+			"item_name", trade.ItemName,
+			"trigger_type", trade.TriggerType,
+			"timestamp", timestamp,
+			"created_at", createdAt)
+
 		trades = append(trades, trade)
 	}
 
+	log.Debug("Total trades retrieved", "count", len(trades))
 	return trades, nil
 }
 

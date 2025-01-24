@@ -11,19 +11,25 @@
       let pkgs = nixpkgs.legacyPackages.${system};
       in {
         devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
+          nativeBuildInputs = with pkgs; [
             # Go
             go
             gopls
             gotools
             go-tools
 
-            # Build dependencies
-            pkg-config
+            xorg.libX11.dev
+            xorg.libXi
+            xorg.libxcb
+            xorg.libXfixes
+            xorg.libXext
+            xorg.libXtst
 
-            # Deps
             rofi
           ];
+
+          # Set library path for OpenGL
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.xorg.libX11 ];
 
           # Set library path for OpenGL
           shellHook = ''

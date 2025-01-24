@@ -10,6 +10,7 @@ import (
 	"hypr-exiled/internal/ipc"
 	"hypr-exiled/internal/models"
 	poe_log "hypr-exiled/internal/poe/log"
+	"hypr-exiled/internal/poe/window"
 	"hypr-exiled/internal/trade_manager"
 	"hypr-exiled/pkg/global"
 	"hypr-exiled/pkg/notify"
@@ -19,6 +20,7 @@ type HyprExiled struct {
 	entries       []models.TradeEntry
 	poeLogWatcher *poe_log.LogWatcher
 	TradeManager  *trade_manager.TradeManager
+	detector      *window.Detector
 }
 
 func NewHyprExiled() (*HyprExiled, error) {
@@ -27,9 +29,9 @@ func NewHyprExiled() (*HyprExiled, error) {
 
 	log.Info("Creating new Hypr Exiled instance")
 	log.Debug("Initializing HyprExiled",
-		"log_path", config.PoeLogPath,
-		"notify_command", config.NotifyCommand,
-		"trigger_count", len(config.CompiledTriggers))
+		"log_path", config.GetPoeLogPath(),
+		"notify_command", config.GetNotifyCommand(),
+		"trigger_count", len(config.GetTriggers()))
 
 	if err := checkDependencies(); err != nil {
 		log.Error("Dependency check failed", err,
@@ -38,18 +40,24 @@ func NewHyprExiled() (*HyprExiled, error) {
 		return nil, err
 	}
 
-	tradeManager := trade_manager.NewTradeManager()
+	detector := window.NewDetector()
+	if err := detector.Start(); err != nil {
+		log.Error("Failed to start window detector", err)
+		return nil, err
+	}
+
+	tradeManager := trade_manager.NewTradeManager(detector)
 
 	helper := &HyprExiled{
 		entries:      make([]models.TradeEntry, 0),
-		TradeManager: tradeManager, // Use TradeManager (uppercase T)
+		TradeManager: tradeManager,
+		detector:     detector,
 	}
 
-	log.Debug("Creating log watcher instance")
 	logWatcher, err := poe_log.NewLogWatcher(
 		helper.handleTradeEntry,
+		detector,
 	)
-
 	if err != nil {
 		log.Error("Log watcher initialization failed",
 			err,

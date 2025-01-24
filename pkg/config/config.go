@@ -11,73 +11,115 @@ import (
 	"hypr-exiled/pkg/logger"
 )
 
+// Config holds the application configuration.
 type Config struct {
-	// Configurable via use file
-	PoeLogPath    string            `json:"poe_log_path"`
-	Triggers      map[string]string `json:"triggers"`
-	Commands      map[string]string `json:"commands"`
-	NotifyCommand string            `json:"notify_command"`
+	// Configurable via JSON file (private fields to enforce immutability)
+	poeLogPath    string
+	triggers      map[string]string
+	commands      map[string][]string
+	notifyCommand string
 
 	// Internal fields
-	CompiledTriggers map[string]*regexp.Regexp `json:"-"`
+	compiledTriggers map[string]*regexp.Regexp `json:"-"`
 	log              *logger.Logger
-	AssetsDir        string `json:"-"`
+	assetsDir        string `json:"-"`
 }
 
+// New creates a new Config instance with the provided logger.
 func New(log *logger.Logger) *Config {
 	return &Config{
 		log: log,
 	}
 }
 
+// LoadFromFile loads the configuration from a JSON file.
 func (c *Config) LoadFromFile(path string, log *logger.Logger) error {
-	log.Debug("Loading configuration from file",
-		"path", path)
+	log.Debug("Loading configuration from file", "path", path)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Error("Failed to read config file", err,
-			"path", path)
+		log.Error("Failed to read config file", err, "path", path)
 		return err
 	}
-	log.Debug("Config file read successfully",
-		"size_bytes", len(data))
+	log.Debug("Config file read successfully", "size_bytes", len(data))
 
-	if err := json.Unmarshal(data, c); err != nil {
+	// Use a temporary struct to unmarshal JSON
+	var temp struct {
+		PoeLogPath    string              `json:"poe_log_path"`
+		Triggers      map[string]string   `json:"triggers"`
+		Commands      map[string][]string `json:"commands"`
+		NotifyCommand string              `json:"notify_command"`
+	}
+	if err := json.Unmarshal(data, &temp); err != nil {
 		log.Error("Failed to parse config JSON", err)
 		return err
 	}
 	log.Debug("Config JSON parsed successfully")
 
+	// Assign to private fields
+	c.poeLogPath = temp.PoeLogPath
+	c.triggers = temp.Triggers
+	c.commands = temp.Commands
+	c.notifyCommand = temp.NotifyCommand
+
 	return c.compile()
 }
 
+// compile compiles the regex patterns in the triggers map.
 func (c *Config) compile() error {
 	log := c.log
-	log.Debug("Compiling trigger patterns",
-		"trigger_count", len(c.Triggers))
+	log.Debug("Compiling trigger patterns", "trigger_count", len(c.triggers))
 
-	c.CompiledTriggers = make(map[string]*regexp.Regexp)
-	for name, pattern := range c.Triggers {
-		log.Debug("Compiling trigger pattern",
-			"name", name,
-			"pattern", pattern)
+	c.compiledTriggers = make(map[string]*regexp.Regexp)
+	for name, pattern := range c.triggers {
+		log.Debug("Compiling trigger pattern", "name", name, "pattern", pattern)
 
 		re, err := regexp.Compile(pattern)
 		if err != nil {
-			log.Error("Failed to compile trigger pattern", err,
-				"name", name,
-				"pattern", pattern)
+			log.Error("Failed to compile trigger pattern", err, "name", name, "pattern", pattern)
 			return err
 		}
-		c.CompiledTriggers[name] = re
+		c.compiledTriggers[name] = re
 	}
 
-	log.Debug("All trigger patterns compiled successfully",
-		"compiled_count", len(c.CompiledTriggers))
+	log.Debug("All trigger patterns compiled successfully", "compiled_count", len(c.compiledTriggers))
 	return nil
 }
 
+// GetCommands returns a copy of the commands map.
+func (c *Config) GetCommands() map[string][]string {
+	commandsCopy := make(map[string][]string)
+	for k, v := range c.commands {
+		commandsCopy[k] = append([]string{}, v...) // Copy the slice
+	}
+	return commandsCopy
+}
+
+// GetTriggers returns a copy of the triggers map.
+func (c *Config) GetTriggers() map[string]string {
+	triggersCopy := make(map[string]string)
+	for k, v := range c.triggers {
+		triggersCopy[k] = v
+	}
+	return triggersCopy
+}
+
+// GetNotifyCommand returns the notify command.
+func (c *Config) GetNotifyCommand() string {
+	return c.notifyCommand
+}
+
+// GetPoeLogPath returns the PoE log path.
+func (c *Config) GetPoeLogPath() string {
+	return c.poeLogPath
+}
+
+// GetAssetsDir returns the assets directory.
+func (c *Config) GetAssetsDir() string {
+	return c.assetsDir
+}
+
+// getDefaultPoeLogPath finds the default Path of Exile 2 log file.
 func getDefaultPoeLogPath(log *logger.Logger) (string, error) {
 	log.Debug("Looking for default POE log path")
 
@@ -101,11 +143,11 @@ func getDefaultPoeLogPath(log *logger.Logger) (string, error) {
 		}
 	}
 
-	log.Error("No valid POE log file found", nil,
-		"checked_paths", possiblePaths)
+	log.Error("No valid POE log file found", nil, "checked_paths", possiblePaths)
 	return "", fmt.Errorf("no valid Path of Exile 2 log file found in common locations")
 }
 
+// DefaultConfig creates a default configuration.
 func DefaultConfig(log *logger.Logger) (*Config, error) {
 	log.Debug("Creating default configuration")
 
@@ -116,26 +158,24 @@ func DefaultConfig(log *logger.Logger) (*Config, error) {
 	}
 
 	config := &Config{
-		PoeLogPath: logPath,
-		Triggers: map[string]string{
-			// Buying from others (they want to sell to us)
+		poeLogPath: logPath,
+		triggers: map[string]string{
 			"incoming_trade": `\[INFO Client \d+\] @From ([^:]+): Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\d+(?:\.\d+)?) ([^ ]+) in ([^\(]+) \(stash tab "([^"]+)"; position: left (\d+), top (\d+)\)`,
-			// Selling to others (they want to buy from us)
 			"outgoing_trade": `\[INFO Client \d+\] @To ([^:]+): Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\d+(?:\.\d+)?) ([^ ]+) in ([^\(]+) \(stash tab "([^"]+)"; position: left (\d+), top (\d+)\)`,
 		},
-		Commands: map[string]string{
-			"trade":  "@trade {player}",
-			"invite": "/invite {player}",
-			"thank":  "@{player} thanks!",
+		commands: map[string][]string{
+			"party":  {"/invite {player}"},
+			"finish": {"/kick {player}", "@{player} thanks!"},
+			"trade":  {"/tradewith {player}"},
 		},
-		NotifyCommand: "",
+		notifyCommand: "",
 		log:           log,
 	}
 
 	log.Info("Created default configuration",
 		"log_path", logPath,
-		"trigger_count", len(config.Triggers),
-		"command_count", len(config.Commands))
+		"trigger_count", len(config.triggers),
+		"command_count", len(config.commands))
 
 	if err := config.compile(); err != nil {
 		log.Error("Failed to compile default config triggers", err)
@@ -145,6 +185,7 @@ func DefaultConfig(log *logger.Logger) (*Config, error) {
 	return config, nil
 }
 
+// loadConfigFromPath loads the configuration from a file.
 func loadConfigFromPath(path string, log *logger.Logger) (*Config, error) {
 	config := &Config{log: log}
 	if err := config.LoadFromFile(path, log); err != nil {
@@ -153,7 +194,7 @@ func loadConfigFromPath(path string, log *logger.Logger) (*Config, error) {
 	return config, nil
 }
 
-// initializeConfig creates or loads the config
+// initializeConfig creates or loads the configuration.
 func initializeConfig(providedPath string, defaultPath string, log *logger.Logger) (*Config, error) {
 	var config *Config
 	var err error
@@ -194,6 +235,7 @@ func initializeConfig(providedPath string, defaultPath string, log *logger.Logge
 	return config, nil
 }
 
+// FindConfig locates and initializes the configuration.
 func FindConfig(providedPath string, log *logger.Logger, embeddedAssets embed.FS) (*Config, error) {
 	log.Info("Looking for configuration", "provided_path", providedPath)
 
@@ -237,26 +279,29 @@ func FindConfig(providedPath string, log *logger.Logger, embeddedAssets embed.FS
 	return config, nil
 }
 
+// GetCurrencyIconPath returns the path to the currency icon.
 func (c *Config) GetCurrencyIconPath(currencyType string) string {
-	return filepath.Join(c.AssetsDir, currencyType+".png")
+	return filepath.Join(c.assetsDir, currencyType+".png")
 }
 
+// GetRofiThemePath returns the path to the Rofi theme.
 func (c *Config) GetRofiThemePath() (string, error) {
 	c.log.Debug("Getting Rofi theme path")
-	themePath := filepath.Join(c.AssetsDir, "trade.rasi")
+	themePath := filepath.Join(c.assetsDir, "trade.rasi")
 	c.log.Debug("Using default Rofi theme", "path", themePath)
 	return themePath, nil
 }
 
+// setupAssets sets up the assets directory and copies embedded assets.
 func (c *Config) setupAssets(configDir string, embeddedAssets embed.FS) error {
 	c.log.Debug("Setting up assets directory")
 
 	// Set assets directory path
-	c.AssetsDir = filepath.Join(configDir, "assets")
+	c.assetsDir = filepath.Join(configDir, "assets")
 
 	// Create assets directory if it doesn't exist
-	if err := os.MkdirAll(c.AssetsDir, 0755); err != nil {
-		c.log.Error("Failed to create assets directory", err, "path", c.AssetsDir)
+	if err := os.MkdirAll(c.assetsDir, 0755); err != nil {
+		c.log.Error("Failed to create assets directory", err, "path", c.assetsDir)
 		return fmt.Errorf("failed to create assets directory: %w", err)
 	}
 
@@ -273,7 +318,7 @@ func (c *Config) setupAssets(configDir string, embeddedAssets embed.FS) error {
 		}
 
 		sourceFile := filepath.Join("assets", entry.Name())
-		destFile := filepath.Join(c.AssetsDir, entry.Name())
+		destFile := filepath.Join(c.assetsDir, entry.Name())
 
 		// Check if file already exists
 		if _, err := os.Stat(destFile); err == nil {
@@ -284,25 +329,27 @@ func (c *Config) setupAssets(configDir string, embeddedAssets embed.FS) error {
 		// Read embedded file
 		data, err := embeddedAssets.ReadFile(sourceFile)
 		if err != nil {
-			c.log.Error("Failed to read embedded asset", err,
-				"file", sourceFile)
+			c.log.Error("Failed to read embedded asset", err, "file", sourceFile)
 			return fmt.Errorf("failed to read embedded asset %s: %w", sourceFile, err)
 		}
 
 		// Write to destination
 		if err := os.WriteFile(destFile, data, 0644); err != nil {
-			c.log.Error("Failed to write asset file", err,
-				"destination", destFile)
+			c.log.Error("Failed to write asset file", err, "destination", destFile)
 			return fmt.Errorf("failed to write asset file %s: %w", destFile, err)
 		}
 
-		c.log.Debug("Copied asset file",
-			"source", sourceFile,
-			"destination", destFile)
+		c.log.Debug("Copied asset file", "source", sourceFile, "destination", destFile)
 	}
 
-	c.log.Info("Assets setup completed",
-		"assets_dir", c.AssetsDir)
-
+	c.log.Info("Assets setup completed", "assets_dir", c.assetsDir)
 	return nil
+}
+
+func (c *Config) GetCompiledTriggers() map[string]*regexp.Regexp {
+	triggersCopy := make(map[string]*regexp.Regexp)
+	for k, v := range c.compiledTriggers {
+		triggersCopy[k] = v
+	}
+	return triggersCopy
 }

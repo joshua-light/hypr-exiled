@@ -27,22 +27,16 @@ type LogWatcher struct {
 	stopped     bool
 }
 
-func NewLogWatcher(handler func(models.TradeEntry)) (*LogWatcher, error) {
+func NewLogWatcher(handler func(models.TradeEntry), detector *window.Detector) (*LogWatcher, error) {
 	cfg, log, _ := global.GetAll()
 	log.Debug("Initializing new LogWatcher",
-		"path", cfg.PoeLogPath,
-		"trigger_count", len(cfg.Triggers))
+		"path", cfg.GetPoeLogPath(),
+		"trigger_count", len(cfg.GetTriggers()))
 
-	detector := window.NewDetector()
 	watcher := &LogWatcher{
 		handler:     handler,
 		windowCheck: detector,
 		stopChan:    make(chan struct{}),
-	}
-
-	if err := detector.Start(); err != nil {
-		log.Error("Failed to start window detector", err)
-		return nil, fmt.Errorf("failed to start window detector: %w", err)
 	}
 
 	log.Debug("LogWatcher initialized successfully")
@@ -51,9 +45,9 @@ func NewLogWatcher(handler func(models.TradeEntry)) (*LogWatcher, error) {
 
 func (w *LogWatcher) Watch() error {
 	cfg, log, _ := global.GetAll()
-	log.Info("Starting log watch routine", "path", cfg.PoeLogPath)
+	log.Info("Starting log watch routine", "path", cfg.GetPoeLogPath())
 
-	file, err := os.Open(cfg.PoeLogPath)
+	file, err := os.Open(cfg.GetPoeLogPath())
 	if err != nil {
 		log.Error("Failed to open log file", err)
 		return fmt.Errorf("failed to open log file: %w", err)
@@ -187,7 +181,7 @@ func (w *LogWatcher) processLogLine(line string) error {
 	}
 
 	// Process trade messages
-	for triggerName, trigger := range cfg.CompiledTriggers {
+	for triggerName, trigger := range cfg.GetCompiledTriggers() {
 		matches := trigger.FindStringSubmatch(line)
 		if len(matches) > 1 {
 			// Convert currency amount to float
