@@ -79,16 +79,17 @@ Note: The background service must be running before using the `--showTrades` com
 
 See individual module documentation for detailed information:
 
-- [Main Application](doc/main.md): Entry point and service management
-- [App Core](doc/app.md): Application lifecycle and trade handling
-- [IPC](doc/ipc.md): Inter-process communication
-- [POE Integration](doc/poe.md): Game log monitoring and window detection
-- [Window Management](doc/wm.md): Window manager abstraction
-- [Trade Manager](doc/trade-manager.md): Trade processing and UI
-- [Input](doc/input.md): Game input automation
-- [Rofi](doc/rofi.md): Trade UI implementation
-- [Storage](doc/storage.md): Trade data persistence
-- [Notify](doc/notify.md): System notifications
+- [Main Application](cmd/hypr-exiled/DOC.MD): Entry point, service management
+- [App Core](internal/app/DOC.MD): Application lifecycle, trade handling
+- [IPC](internal/ipc/DOC.MD): Inter-process communication
+- [POE Integration](internal/poe/DOC.MD): Game monitoring, window detection
+- [Window Management](internal/wm/DOC.MD): WM abstraction layer
+- [Trade Manager](internal/trade_manager/DOC.MD): Trade processing and UI
+- [Input](internal/input/DOC.MD): Game input automation
+- [Rofi](internal/rofi/DOC.MD): Trade UI implementation
+- [Storage](internal/storage/DOC.MD): Trade data persistence
+- [Notify](pkg/notify/DOC.MD): System notifications
+- [Config](pkg/config/DOC.MD): Configuration management
 
 ## Window Manager Support
 
