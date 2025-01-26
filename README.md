@@ -92,10 +92,10 @@ Add to your `hyprland.conf` (`hypr-exiled` background service must be running):
 
 ```bash
 # Show trades UI when PoE 2 is focused (Mod+Shift+E)
-bind = $mainMod SHIFT, E, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/binary/hypr-exiled --showTrades
+bind = $mainMod SHIFT, E, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/binary/hypr-exiled -showTrades
 
 # Quick hideout when PoE 2 is focused (F5)
-bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/binary/hypr-exiled --hideout
+bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/binary/hypr-exiled -hideout
 ```
 
 ## Core Features ✨
