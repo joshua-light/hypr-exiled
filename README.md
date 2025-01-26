@@ -1,83 +1,105 @@
-# Hypr Exiled
+# Hypr Exiled 🎮⚡
 
-A Path of Exile 2 trade manager designed for Hyprland, with support for X11 environments.
+A lightweight Path of Exile 2 trade manager built for keyboard warriors and tiling WM enthusiasts.
 
-## Important Note
+## Why Choose Hypr Exiled? 🤔
 
-This project was created primarily for:
+Built for:
 
-- OS's with restricted AppImage support (like NixOS)
-- Users preferring keyboard-driven, minimal interfaces
-- Hyprland users wanting native integration
+- **NixOS** and other AppImage-restricted distros 🐧
+- **Hyprland** users wanting native integration 🪟
+- Keyboard-driven workflows without mouse dependency ⌨️
 
-If these aren't your requirements, consider using more established alternatives like [Exiled-Exchange-2](https://github.com/Kvan7/Exiled-Exchange-2), which offers AppImage builds and a full-featured GUI.
+> ℹ️ Prefer traditional GUIs? Check out [Exiled-Exchange-2](https://github.com/Kvan7/Exiled-Exchange-2) for AppImage builds
 
-## Architecture
+## How It Works 🔧
 
-Hypr Exiled operates as a client-server application:
+### Smart Architecture
 
-- **Background Service**: Monitors PoE logs and manages trades
-- **Trade UI**: Rofi-based interface for interacting with trades
+```
+                      +-------------------+
+                      |  Background       |
+                      |  Service          |
+                      |                   |
+                      |  (Initialized     |
+                      |   Input/WM/Config)|
+                      +-------------------+
+                            ▲  ▲  ▲
+                            |  |  |
+            +---------------+  |  +-----------------+
+            |                  |                    |
+  +---------+----------+  +----+--------+  +--------+--------+
+  | ./hypr-exiled      |  | ./hypr-exiled | | ./hypr-exiled   |
+  | -showTrades        |  | -hideout      | | (background)    |
+  +--------------------+  +---------------+ +-----------------+
+```
 
-### Operation Flow
+### Key Benefits 🚀
 
-1. Start background service: `hypr-exiled`
-2. Service monitors PoE logs for trades
-3. Access trade UI: `hypr-exiled --showTrades`
-4. UI communicates with service via Unix socket
+- **Single Initialization**: All components initialized once in background service
+- **Clean Separation**: Trade management vs direct actions vs UI layers
+- **Consistent State**: One window manager connection for all operations
+- **Easy Extensions**: Add new commands with just:
+  1. IPC protocol update
+  2. Handler function
+  3. Client flag
 
-## Features
+## Get Started 🛠️
 
-- Real-time trade monitoring and management
-- Rofi-based trade interface
-- Automated trade responses
-- Cross-window-manager support (Hyprland/X11)
+### Dependencies
 
-## Dependencies
-
-- `rofi`: Trade UI display
-- `libX11`, `libXtst`, `libXi`, `libxcb`: Input simulation (required even on Wayland)
-- `go` 1.21+
-
-## Building and Running
-
-### Build
+Essential packages:
 
 ```bash
-# Using Nix Flakes (recommended)
-# Make sure u have nix and nix flakes enabled
+# Core
+go rofi libX11 libXtst libXi libxcb
+
+# Sound notifications
+alsa-lib
+```
+
+### Build & Run
+
+#### Using Nix Flakes
+
+```bash
 nix develop
 go build -o hypr-exiled ./cmd/hypr-exiled
-
-# Manual Build
-go build -o hypr-exiled ./cmd/hypr-exiled
+./hypr-exiled --debug  # Start service
 ```
 
-### Running
+#### Manual Build
 
-1. Start background service:
+Check flake.nix for required packages if building without Nix:
+
+- Go 1.21+
+- X11/XCB development headers
+- Rofi
+- ALSA development headers
+
+### Essential Commands
 
 ```bash
+# Start background service
 ./hypr-exiled
-```
 
-2. Show trade UI (requires service running):
-
-```bash
+# Show trades UI (requires running service)
 ./hypr-exiled --showTrades
+
+# Warp to hideout
+./hypr-exiled --hideout
 ```
 
-3. Enable debug logging:
+## Core Features ✨
 
-```bash
-./hypr-exiled --debug
-```
+- Real-time trade monitoring 🔍
+- Rofi-powered keyboard interface 🎨
+- Cross-WM support (Hyprland/X11) 🖥️
+- Automated trade responses 🤖
 
-Note: The background service must be running before using the `--showTrades` command. The service communicates with the UI through a Unix socket at `/tmp/hypr-exiled.sock`.
+## Documentation 📚
 
-## Documentation
-
-See individual module documentation for detailed information:
+### Architecture Overview
 
 - [Main Application](cmd/hypr-exiled/DOC.MD): Entry point, service management
 - [App Core](internal/app/DOC.MD): Application lifecycle, trade handling
@@ -91,14 +113,11 @@ See individual module documentation for detailed information:
 - [Notify](pkg/notify/DOC.MD): System notifications
 - [Config](pkg/config/DOC.MD): Configuration management
 
-## Window Manager Support
+## For Developers 👩‍💻
 
-Currently supports:
+### Window Manager Support
 
-- Hyprland (primary focus)
-- X11 (secondary support)
-
-Adding support for new window managers requires implementing the `WindowManager` interface:
+Implement the interface:
 
 ```go
 type WindowManager interface {
@@ -108,24 +127,22 @@ type WindowManager interface {
 }
 ```
 
-## Development Environment
+### Development Environment (Nix)
 
-The included `flake.nix` provides all necessary dependencies:
-
-```nix
-nix develop
-```
-
-### Included Development Tools
-
-- Go toolchain
-- X11/XCB libraries
+```bash
+nix develop  # Provides:
+- Go 1.21+
+- X11/XCB libs
 - Rofi
-- Required development headers
+- ALSA libs
+- Development headers
+```
 
 ## Contributing
 
-1. Ensure all dependencies are installed
-2. Follow existing module documentation patterns
-3. Implement tests for new features
-4. Update relevant documentation
+[TODO: for now just follow the Architecture Overview sections]
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
