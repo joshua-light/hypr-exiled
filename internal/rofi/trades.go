@@ -36,7 +36,7 @@ var (
 
 	TradeConfig = Config{
 		Args:    []string{},
-		Message: "T (trade) | P (party) | F (finish) | D (delete)",
+		Message: "P (party) | T (trade) | F (finish) | D (delete)",
 	}
 )
 
@@ -63,7 +63,7 @@ func NewTradeDisplayManager(tradeHandler, partyHandler, finishHandler, deleteHan
 	args := append(baseArgs, "-theme", themePath)
 	config := Config{
 		Args:    args,
-		Message: "T (trade) | P (party) | F (finish) | D (delete)",
+		Message: TradeConfig.Message,
 	}
 
 	return &TradeDisplayManager{

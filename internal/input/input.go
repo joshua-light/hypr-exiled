@@ -33,13 +33,14 @@ func NewInput(detector *window.Detector) (*Input, error) {
 
 func (i *Input) ExecutePoECommands(commands []string) error {
 	if !i.detector.IsActive() {
-		i.log.Debug("PoE 2 Window not found")
-		return nil
+		return fmt.Errorf("Path of Exile 2 needs to be running")
 	}
+
 	window := i.detector.GetCurrentWindow()
 	if err := i.windowManager.FocusWindow(window); err != nil {
 		return fmt.Errorf("failed to focus window: %w", err)
 	}
+
 	for _, cmd := range commands {
 		i.log.Debug("Executing PoE command",
 			"command", cmd,
@@ -50,4 +51,8 @@ func (i *Input) ExecutePoECommands(commands []string) error {
 		robotgo.KeyTap("enter")
 	}
 	return nil
+}
+
+func (i *Input) ExecuteHideout() error {
+	return i.ExecutePoECommands([]string{"/hideout"})
 }

@@ -11,6 +11,9 @@ import (
 )
 
 var (
+	closeOnce sync.Once
+)
+var (
 	cfg           *config.Config
 	log           *logger.Logger
 	notifier      *notify.NotifyService
@@ -69,4 +72,33 @@ func GetAll() (*config.Config, *logger.Logger, *notify.NotifyService) {
 	mu.RLock()
 	defer mu.RUnlock()
 	return cfg, log, notifier
+}
+
+func Close() {
+	closeOnce.Do(func() {
+		mu.Lock()
+		defer mu.Unlock()
+
+		// Close in reverse initialization order
+		if soundNotifier != nil {
+			if err := soundNotifier.Close(); err != nil && log != nil {
+				log.Error("Failed to close sound notifier", err)
+			}
+			soundNotifier = nil
+		}
+
+		if notifier != nil {
+			if err := notifier.Close(); err != nil && log != nil {
+				log.Error("Failed to close notification service", err)
+			}
+			notifier = nil
+		}
+
+		if log != nil {
+			log.Close()
+			log = nil
+		}
+
+		cfg = nil
+	})
 }

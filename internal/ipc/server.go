@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"hypr-exiled/internal/input"
 	"hypr-exiled/internal/trade_manager"
 	"hypr-exiled/pkg/global"
 )
@@ -22,7 +23,7 @@ type Response struct {
 	Message string `json:"message"`
 }
 
-func StartSocketServer(tradeManager *trade_manager.TradeManager) {
+func StartSocketServer(tradeManager *trade_manager.TradeManager, input *input.Input) {
 	log := global.GetLogger()
 
 	// Remove the socket file if it already exists
@@ -55,11 +56,11 @@ func StartSocketServer(tradeManager *trade_manager.TradeManager) {
 
 		log.Debug("New connection accepted", "remote_addr", conn.RemoteAddr())
 
-		go handleConnection(conn, tradeManager)
+		go handleConnection(conn, tradeManager, input)
 	}
 }
 
-func handleConnection(conn net.Conn, tradeManager *trade_manager.TradeManager) {
+func handleConnection(conn net.Conn, tradeManager *trade_manager.TradeManager, input *input.Input) {
 	log := global.GetLogger()
 	defer conn.Close()
 
@@ -82,6 +83,22 @@ func handleConnection(conn net.Conn, tradeManager *trade_manager.TradeManager) {
 		} else {
 			log.Info("Trades displayed successfully")
 			resp = Response{Status: "success", Message: "Trades displayed successfully"}
+		}
+	case "hideout":
+		log.Debug("Handling hideout request")
+		if err := input.ExecuteHideout(); err != nil {
+			log.Error("Hideout command failed", err)
+
+			resp = Response{
+				Status:  "error",
+				Message: err.Error(),
+			}
+		} else {
+			log.Info("Hideout command executed successfully")
+			resp = Response{
+				Status:  "success",
+				Message: "Warped to hideout",
+			}
 		}
 	default:
 		log.Error("Unknown command received", fmt.Errorf("command: %s", req.Command))

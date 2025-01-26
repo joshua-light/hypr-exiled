@@ -17,7 +17,6 @@
             gopls
             gotools
             go-tools
-            pkg-config
 
             xorg.libX11.dev
             xorg.libXi
@@ -25,15 +24,14 @@
             xorg.libXfixes
             xorg.libXext
             xorg.libXtst
-            alsa-lib
 
             rofi
+            pkg-config
+            alsa-lib
           ];
 
-          # Set library path for OpenGL
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.xorg.libX11 ];
 
-          # Set library path for OpenGL
           shellHook = ''
             echo "Hypr Exiled development environment"
             echo "Ready to build with: go build -o hypr-exiled ./cmd/hypr-exiled"

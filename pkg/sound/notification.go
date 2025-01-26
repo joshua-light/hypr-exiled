@@ -65,3 +65,8 @@ func (s *SoundNotifier) PlayTradeSound() error {
 	time.Sleep(time.Second)
 	return nil
 }
+
+func (s *SoundNotifier) Close() error {
+	speaker.Close()
+	return nil
+}

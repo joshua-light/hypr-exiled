@@ -1,72 +1,59 @@
 # HyprExiled Core Application
 
-## `app.go`
+## Overview
+Core service managing trade processing, window detection, and command execution through IPC.
 
-The `app.go` file implements the core application logic. It:
-1. Manages trade entries and window detection
-2. Handles Path of Exile log watching
-3. Implements IPC server for trade management
-4. Provides graceful shutdown handling
+## Key Components
 
----
-
-### Key Components
-
-- **HyprExiled Struct**:
-  - `entries`: List of processed trade entries
-  - `poeLogWatcher`: Watches Path of Exile client.txt
-  - `TradeManager`: Handles trade processing and UI
-  - `detector`: Monitors game window state
-
-- **Dependencies**:
-  - Requires `rofi` for trade UI display
-  - Uses IPC for communication between service and UI
-  - Integrates with Path of Exile log file
-
----
-
-### Main Functions
-
+### HyprExiled Struct
 ```go
-// Create new instance with all components
-NewHyprExiled()
-
-// Start the service and watch for trades
-Run()
-
-// Gracefully shutdown all components
-Stop()
+type HyprExiled struct {
+    entries       []models.TradeEntry
+    poeLogWatcher *poe_log.LogWatcher
+    TradeManager  *trade_manager.TradeManager
+    detector      *window.Detector
+    input         *input.Input
+}
 ```
 
-### Implementation Details
+### Architecture Benefits
+1. Single source of truth for all components
+2. Centralized window management
+3. Unified command handling
+4. Clean resource lifecycle
 
-#### `NewHyprExiled()`
-- Verifies system dependencies
-- Initializes window detector
-- Sets up trade manager
-- Creates log watcher instance
+### Key Operations
+```go
+NewHyprExiled()  // Initialize all components
+Run()            // Start service and IPC server
+Stop()           // Cleanup resources
+```
 
-#### `Run()`
-- Starts IPC socket server
-- Initiates log watching
-- Shows startup notification
-- Waits for shutdown signal
+## Implementation Details
 
-#### `Stop()`
-- Stops log watcher
-- Cleans up resources
-- Logs shutdown statistics
+### Initialization Flow
+1. Dependency verification
+2. Window detector setup
+3. Input handler creation
+4. Trade manager initialization
+5. IPC server startup
+
+### Service Lifecycle
+1. Component initialization
+2. IPC server startup
+3. Log watcher activation
+4. Signal handling
+5. Graceful shutdown
 
 ### Error Handling
-
-- **Dependencies**: Checks for required system tools
-- **Log Watcher**: Monitors for and reports watching errors
-- **Notifications**: Reports critical errors to user
-- **Graceful Shutdown**: Handles SIGINT and SIGTERM
+- Dependency validation
+- Component initialization
+- IPC communication
+- Resource cleanup
 
 ### Best Practices
-
-- **Logging**: Structured logging with debug/info levels
-- **Error Context**: Detailed error information with metadata
-- **Resource Management**: Proper cleanup on shutdown
-- **Dependency Injection**: Uses global config and logger
+- Single component instances
+- Structured logging
+- Clean shutdown handling
+- IPC-based communication
+```

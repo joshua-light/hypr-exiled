@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"hypr-exiled/internal/input"
 	"hypr-exiled/internal/ipc"
 	"hypr-exiled/internal/models"
 	poe_log "hypr-exiled/internal/poe/log"
@@ -21,6 +22,7 @@ type HyprExiled struct {
 	poeLogWatcher *poe_log.LogWatcher
 	TradeManager  *trade_manager.TradeManager
 	detector      *window.Detector
+	input         *input.Input // Add this field
 }
 
 func NewHyprExiled() (*HyprExiled, error) {
@@ -46,12 +48,18 @@ func NewHyprExiled() (*HyprExiled, error) {
 		return nil, err
 	}
 
-	tradeManager := trade_manager.NewTradeManager(detector)
+	input, err := input.NewInput(detector)
+	if err != nil {
+		log.Fatal("Failed to initialize input handler", err)
+	}
+
+	tradeManager := trade_manager.NewTradeManager(detector, input)
 
 	helper := &HyprExiled{
 		entries:      make([]models.TradeEntry, 0),
 		TradeManager: tradeManager,
 		detector:     detector,
+		input:        input,
 	}
 
 	logWatcher, err := poe_log.NewLogWatcher(
@@ -93,7 +101,7 @@ func (p *HyprExiled) Run() error {
 	log.Info("Starting Hypr Exiled service")
 	log.Debug("Initializing service components")
 	log.Info("Starting IPC socket server")
-	go ipc.StartSocketServer(p.TradeManager)
+	go ipc.StartSocketServer(p.TradeManager, p.input)
 
 	if err := notifier.Show("Hypr Exiled started", notify.Info); err != nil {
 		log.Error("Startup notification failed",

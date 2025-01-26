@@ -1,27 +1,32 @@
-# IPC Package Documentation
+# IPC Package
 
 ## Overview
+Unix domain socket-based communication system for command routing between UI and service components.
 
-The IPC package implements Unix domain socket-based communication between the background service and UI components.
+## Architecture
 
----
+### Command Flow
+```
+                      +-------------------+
+                      |  Background       |
+                      |  Service          |
+                      |                   |
+                      |  (Initialized     |
+                      |   Input/WM/Config)|
+                      +-------------------+
+                            ▲  ▲  ▲
+                            |  |  |
+            +---------------+  |  +-----------------+
+            |                  |                    |
+  +---------+----------+  +----+--------+  +--------+--------+
+  | ./hypr-exiled      |  | ./hypr-exiled | | ./hypr-exiled   |
+  | -showTrades        |  | -hideout      | | (background)    |
+  +--------------------+  +---------------+ +-----------------+
+```
 
-### Components
-
-- **Client** (`client.go`):
-  - Sends commands to the background service
-  - Handles response processing
-  - Manages socket connections
-
-- **Server** (`server.go`):
-  - Listens for client connections
-  - Processes incoming commands
-  - Manages trade display requests
-
----
+## Components
 
 ### Protocol
-
 ```go
 type Request struct {
     Command string `json:"command"`
@@ -33,53 +38,29 @@ type Response struct {
 }
 ```
 
+### Supported Commands
+- `showTrades`: Display trade UI
+- `hideout`: Execute hideout command
+
 ### Socket Configuration
 - Path: `/tmp/hypr-exiled.sock`
 - Permissions: 0755
 - Protocol: Unix domain socket
 
----
+## Key Benefits
 
-### Client Functions
+### Single Initialization
+- Input and window manager initialized once
+- No duplicate resource allocation
+- Consistent state management
 
-#### `SendCommand(command string) (Response, error)`
-- Establishes socket connection
-- Sends JSON-encoded command
-- Returns parsed response or error
-- Handles connection cleanup
+### Clean Separation
+- TradeManager: Trade-specific logic
+- Input: Direct PoE actions
+- IPC: Command routing
 
-### Server Functions
-
-#### `StartSocketServer(tradeManager *trade_manager.TradeManager)`
-- Initializes socket listener
-- Creates socket directory
-- Handles incoming connections
-- Spawns connection handlers
-
-#### `handleConnection(conn net.Conn, tradeManager *trade_manager.TradeManager)`
-- Decodes incoming requests
-- Routes commands to trade manager
-- Sends JSON-encoded responses
-- Implements connection lifecycle
-
-### Supported Commands
-
-- `showTrades`: Displays trade UI
-  - Success: Shows trade interface
-  - Error: Returns error message
-
-### Error Handling
-
-- Socket initialization errors
-- Connection failures
-- JSON encoding/decoding errors
-- Invalid commands
-- Trade manager errors
-
-### Best Practices
-
-- Proper socket cleanup on startup
-- Graceful connection handling
-- Structured logging
-- Comprehensive error messaging
-- Goroutine-based connection handling
+### Maintainability
+New commands require only:
+1. IPC protocol update
+2. Handler function
+3. Client flag

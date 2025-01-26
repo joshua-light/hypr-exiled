@@ -14,7 +14,7 @@ import (
 	"hypr-exiled/pkg/notify"
 )
 
-func NewTradeManager(detector *window.Detector) *TradeManager {
+func NewTradeManager(detector *window.Detector, input *input.Input) *TradeManager {
 	cfg, log, notifier := global.GetAll()
 
 	db, err := storage.New()
@@ -29,16 +29,11 @@ func NewTradeManager(detector *window.Detector) *TradeManager {
 		}
 	}()
 
-	inputManager, err := input.NewInput(detector)
-	if err != nil {
-		log.Fatal("Failed to initialize input manager", err)
-	}
-
 	// Create the TradeManager instance
 	tm := &TradeManager{
 		db:       db,
 		notify:   notifier,
-		input:    inputManager,
+		input:    input,
 		detector: detector,
 		cfg:      cfg,
 		log:      log,

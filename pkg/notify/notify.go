@@ -84,3 +84,9 @@ func (n *NotifyService) executeNotifyCommand(title string, message string, nType
 			message))
 	return cmd.Run()
 }
+
+// Empty method maintained for interface consistency
+func (n *NotifyService) Close() error {
+	// No persistent resources to clean up in current implementation
+	return nil
+}
