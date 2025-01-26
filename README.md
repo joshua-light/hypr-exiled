@@ -24,9 +24,8 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 
 **Verified binary available in [Releases](https://github.com/gfsd3v/hypr-exiled/releases):**
 
-````bash
+```bash
 # Verify signatures (requires cosign)
-```sh
 curl -O https://raw.githubusercontent.com/yourusername/hypr-exiled/main/cosign.pub
 cosign verify-blob --key cosign.pub --signature checksums.txt.sig checksums.txt
 sha256sum -c checksums.txt
@@ -53,7 +52,7 @@ Essential packages:
 ```bash
 # Core
 go alsa-lib rofi libX11 libXtst libXi libxcb xdotool # xdotool needed for X11 WMs
-````
+```
 
 ### Build & Run
 
