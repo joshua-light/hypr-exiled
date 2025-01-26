@@ -9,6 +9,9 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,31 +86,55 @@ jobs:
             --output-signature hypr-exiled.sig \
             hypr-exiled-${{ env.NEW_VERSION }}-linux-amd64
 
+      - name: Verify Artifacts Exist
+        run: |
+          echo "Checking release artifacts..."
+          ls -la release/
+
+          # Check for binary
+          if [ ! -f "release/hypr-exiled-${{ env.NEW_VERSION }}-linux-amd64" ]; then
+            echo "❌ Missing binary file!"
+            exit 1
+          fi
+
+          # Check for signatures
+          if [ ! -f "release/checksums.txt.sig" ] || [ ! -f "release/hypr-exiled.sig" ]; then
+            echo "❌ Missing signature files!"
+            exit 1
+          fi
+
+          # Verify checksums file
+          if [ ! -f "release/checksums.txt" ]; then
+            echo "❌ Missing checksums file!"
+            exit 1
+          fi
+
       - name: Create Signed Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.NEW_VERSION }}
           name: "v${{ env.NEW_VERSION }} - Secure Linux Release"
+          generate_release_notes: true
+          files: |
+            release/*
           body: |
             ## Verification Guide
             ```bash
             # Verify checksums signature
             cosign verify-blob --key cosign.pub \
-              --signature release/checksums.txt.sig \
-              release/checksums.txt
+              --signature checksums.txt.sig \
+              checksums.txt
               
             # Verify binary signature
             cosign verify-blob --key cosign.pub \
-              --signature release/hypr-exiled.sig \
-              release/hypr-exiled-${{ env.NEW_VERSION }}-linux-amd64
+              --signature hypr-exiled.sig \
+              hypr-exiled-${{ env.NEW_VERSION }}-linux-amd64
               
             # Validate checksums
-            sha256sum -c release/checksums.txt
+            sha256sum -c checksums.txt
             ```
 
             ## Changelog
             $(git log --pretty=format:"- %s (%h)" $LATEST_TAG..HEAD)
-          files: |
-            release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
