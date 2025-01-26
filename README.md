@@ -2,9 +2,7 @@
 
 A lightweight Path of Exile 2 trade manager built for keyboard warriors and tiling WM enthusiasts.
 
-## Why Choose Hypr Exiled? 🤔
-
-Built for:
+## Built for
 
 - **NixOS** and other AppImage-restricted distros 🐧
 - **Hyprland** users wanting native integration 🪟
@@ -12,9 +10,7 @@ Built for:
 
 > ℹ️ Prefer traditional GUIs? Check out [Exiled-Exchange-2](https://github.com/Kvan7/Exiled-Exchange-2) for AppImage builds
 
-## How It Works 🔧
-
-### Smart Architecture
+### Architecture
 
 ```
                       +-------------------+
@@ -34,12 +30,12 @@ Built for:
   +--------------------+  +---------------+ +-----------------+
 ```
 
-### Key Benefits 🚀
+### Benefits 🚀
 
-- **Single Initialization**: All components initialized once in background service
-- **Clean Separation**: Trade management vs direct actions vs UI layers
-- **Consistent State**: One window manager connection for all operations
-- **Easy Extensions**: Add new commands with just:
+- **Single initialization**: All components initialized once in background service
+- **Clean separation**: Trade management vs direct actions vs UI layers
+- **Consistent state**: One window manager connection for all operations
+- **Easy extensions**: Add new commands with just:
   1. IPC protocol update
   2. Handler function
   3. Client flag
@@ -68,16 +64,16 @@ go build -o hypr-exiled ./cmd/hypr-exiled
 ./hypr-exiled --debug  # Start service
 ```
 
-#### Manual Build
+#### Manual build
 
-Check flake.nix for required packages if building without Nix:
+Check `flake.nix` for required packages if building without Nix:
 
 - Go 1.21+
 - X11/XCB development headers
 - Rofi
 - ALSA development headers
 
-### Essential Commands
+### Essential commands
 
 ```bash
 # Start background service
@@ -90,7 +86,7 @@ Check flake.nix for required packages if building without Nix:
 ./hypr-exiled --hideout
 ```
 
-## Core Features ✨
+## Core features ✨
 
 - Real-time trade monitoring 🔍
 - Rofi-powered keyboard interface 🎨
@@ -113,9 +109,9 @@ Check flake.nix for required packages if building without Nix:
 - [Notify](pkg/notify/DOC.MD): System notifications
 - [Config](pkg/config/DOC.MD): Configuration management
 
-## For Developers 👩‍💻
+## For developers 👩‍💻
 
-### Window Manager Support
+### WM Support
 
 Implement the interface:
 
