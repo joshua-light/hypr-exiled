@@ -65,10 +65,10 @@ Check `flake.nix` for required packages if building without Nix:
 ./hypr-exiled
 
 # Show trades UI (requires running service)
-./hypr-exiled --showTrades
+./hypr-exiled -showTrades
 
 # Warp to hideout
-./hypr-exiled --hideout
+./hypr-exiled -hideout
 ```
 
 ### Configuration
