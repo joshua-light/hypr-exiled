@@ -1,0 +1,100 @@
+name: Secure Linux Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: "v2.2.4"
+
+      - name: Calculate Semantic Version
+        id: version
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_VERSION=${LATEST_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_VERSION"
+
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+
+          # Check commit history for version triggers
+          COMMIT_HISTORY=$(git log --pretty=format:"%s" $LATEST_TAG..HEAD)
+          if echo "$COMMIT_HISTORY" | grep -qi '#major'; then
+            NEW_VERSION="$((MAJOR + 1)).0.0"
+          elif echo "$COMMIT_HISTORY" | grep -qi '#minor'; then
+            NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
+          fi
+
+          echo "version=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Build Linux Binary
+        run: |
+          nix develop --command sh -c "
+            go build -o hypr-exiled-${{ env.NEW_VERSION }}-linux-amd64 ./cmd/hypr-exiled/
+            mkdir -p release
+            mv hypr-exiled-* release/
+          "
+
+      - name: Generate Signed Artifacts
+        env:
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        run: |
+          # Generate checksums
+          cd release
+          sha256sum * > checksums.txt
+
+          # Sign binary and checksums
+          cosign sign-blob --key env://COSIGN_PRIVATE_KEY \
+            checksums.txt --output checksums.txt.sig
+
+          cosign sign-blob --key env://COSIGN_PRIVATE_KEY \
+            hypr-exiled-${{ env.NEW_VERSION }}-linux-amd64 --output hypr-exiled.sig
+
+      - name: Create Signed Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.NEW_VERSION }}
+          name: "v${{ env.NEW_VERSION }} - Secure Linux Release"
+          body: |
+            ## Verification Guide
+            ```bash
+            # Verify checksums signature
+            cosign verify-blob --key cosign.pub \
+              --signature release/checksums.txt.sig \
+              release/checksums.txt
+              
+            # Verify binary signature
+            cosign verify-blob --key cosign.pub \
+              --signature release/hypr-exiled.sig \
+              release/hypr-exiled-${{ env.NEW_VERSION }}-linux-amd64
+              
+            # Validate checksums
+            sha256sum -c release/checksums.txt
+            ```
+
+            ## Changelog
+            $(git log --pretty=format:"- %s (%h)" $LATEST_TAG..HEAD)
+          files: |
+            release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
