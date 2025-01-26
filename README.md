@@ -6,7 +6,15 @@ A lightweight Path of Exile 2 trade manager built for keyboard warriors and tili
 
 - **NixOS** and other AppImage-restricted distros 🐧
 - **Hyprland** users wanting native integration 🪟
+- **X11 Window Managers** with xdotool support:
+  - i3
+  - bspwm
+  - dwm
+  - awesome
+  - xmonad
 - Keyboard-driven workflows without mouse dependency ⌨️
+
+> 📝 X11 support requires `xdotool` package installed
 
 > ℹ️ Prefer traditional GUIs? Check out [Exiled-Exchange-2](https://github.com/Kvan7/Exiled-Exchange-2) for AppImage builds
 
@@ -83,6 +91,28 @@ Check `flake.nix` for required packages if building without Nix:
 ./hypr-exiled --hideout
 ```
 
+### Configuration
+
+Default config path: `$HOME/.config/hypr-exiled/config.json`
+
+```json
+{
+  "poe_log_path": "/path/to/steam/Path of Exile 2/logs/Client.txt",
+  "notify_command": "dunstify", // Supports: dunstify, notify-send, zenity
+  "triggers": {
+    "incoming_trade": "...", // Trade message patterns
+    "outgoing_trade": "..."
+  },
+  "commands": {
+    "finish": ["/kick {player}", "@{player} thanks!"],
+    "party": ["/invite {player}"],
+    "trade": ["/tradewith {player}"]
+  }
+}
+```
+
+Override location: `--config /path/to/config.json`
+
 ### Hyprland Keybinds
 
 Add to your `hyprland.conf` (`hypr-exiled` background service must be running):
@@ -102,7 +132,7 @@ bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && 
 - Theoretical X11 support (untested) via xdotool:
   - Should work on common X11 distributions (Arch, Debian, Ubuntu, Fedora)
   - Compatible with tiling WMs like i3, bspwm, dwm, awesome, xmonad
-  - Requires xdotool package installed
+  - Requires `xdotool`` package installed
 - Automated trade responses 🤖
 
 ## Documentation 📚
@@ -149,7 +179,6 @@ nix develop  # Provides:
 ## Contributing
 
 - [TODO: for now just follow the Architecture Overview sections]
-- See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
