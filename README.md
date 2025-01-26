@@ -64,10 +64,10 @@ Check `flake.nix` for required packages if building without Nix:
 ### Essential commands
 
 ```bash
-# Start background service
+# Start background service (requires to be running for any command to work)
 ./hypr-exiled
 
-# Show trades UI (requires running service)
+# Show trades UI
 ./hypr-exiled -showTrades
 
 # Warp to hideout
