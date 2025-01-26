@@ -1,6 +1,6 @@
 # Hypr Exiled 🎮⚡
 
-A lightweight Path of Exile 2 trade manager built for keyboard warriors and tiling WM enthusiasts.
+A lightweight Path of Exile 2 trade manager built for Keyboard power users and tiling WM enthusiasts.
 
 
 https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
