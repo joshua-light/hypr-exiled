@@ -2,7 +2,7 @@
 
 A lightweight Path of Exile 2 trade manager built for keyboard warriors and tiling WM enthusiasts.
 
-## Built for
+## Who/What this is for
 
 - **NixOS** and other AppImage-restricted distros 🐧
 - **Hyprland** users wanting native integration 🪟
@@ -48,10 +48,7 @@ Essential packages:
 
 ```bash
 # Core
-go rofi libX11 libXtst libXi libxcb
-
-# Sound notifications
-alsa-lib
+go alsa-lib rofi libX11 libXtst libXi libxcb xdotool # xdotool needed for X11 WMs
 ```
 
 ### Build & Run
@@ -102,7 +99,10 @@ bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && 
 
 - Real-time trade monitoring 🔍
 - Rofi-powered keyboard interface 🎨
-- Cross-WM support (Hyprland/X11) 🖥️
+- Theoretical X11 support (untested) via xdotool:
+  - Should work on common X11 distributions (Arch, Debian, Ubuntu, Fedora)
+  - Compatible with tiling WMs like i3, bspwm, dwm, awesome, xmonad
+  - Requires xdotool package installed
 - Automated trade responses 🤖
 
 ## Documentation 📚
@@ -148,8 +148,8 @@ nix develop  # Provides:
 
 ## Contributing
 
-[TODO: for now just follow the Architecture Overview sections]
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+- [TODO: for now just follow the Architecture Overview sections]
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
