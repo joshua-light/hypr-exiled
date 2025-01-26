@@ -59,14 +59,29 @@ jobs:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         run: |
-          cd release
-          # Sign checksums with auto-confirmation
-          cosign sign-blob --yes --key env://COSIGN_PRIVATE_KEY \
-            checksums.txt --output-signature checksums.txt.sig
+          # Create release directory if not exists
+          mkdir -p release
 
-          # Sign binary with auto-confirmation
-          cosign sign-blob --yes --key env://COSIGN_PRIVATE_KEY \
-            hypr-exiled-${{ env.NEW_VERSION }}-linux-amd64 --output-signature hypr-exiled.sig
+          # Generate checksums first
+          cd release
+          sha256sum * > checksums.txt
+
+          # Verify checksums file exists
+          if [ ! -f checksums.txt ]; then
+            echo "❌ Checksums file not found!"
+            exit 1
+          fi
+
+          # Sign artifacts with non-interactive flags
+          cosign sign-blob --yes \
+            --key env://COSIGN_PRIVATE_KEY \
+            --output-signature checksums.txt.sig \
+            checksums.txt
+
+          cosign sign-blob --yes \
+            --key env://COSIGN_PRIVATE_KEY \
+            --output-signature hypr-exiled.sig \
+            hypr-exiled-${{ env.NEW_VERSION }}-linux-amd64
 
       - name: Create Signed Release
         uses: softprops/action-gh-release@v1
