@@ -26,7 +26,7 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 
 ```bash
 # Verify signatures (requires cosign)
-curl -O https://raw.githubusercontent.com/yourusername/hypr-exiled/main/cosign.pub
+curl -O https://raw.githubusercontent.com/gfsd3v/hypr-exiled/main/cosign.pub
 cosign verify-blob --key cosign.pub --signature checksums.txt.sig checksums.txt
 sha256sum -c checksums.txt
 ```
