@@ -112,10 +112,10 @@ bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && 
 
 - Real-time trade monitoring 🔍
 - Rofi-powered keyboard interface 🎨
-- Theoretical X11 support (untested) via xdotool:
+- Theoretical X11 support (untested) via `xdotool`:
   - Should work on common X11 distributions (Arch, Debian, Ubuntu, Fedora)
   - Compatible with tiling WMs like i3, bspwm, dwm, awesome, xmonad
-  - Requires `xdotool`` package installed
+  - Requires `xdotool` package installed
 - Automated trade responses 🤖
 
 ## Documentation 📚
