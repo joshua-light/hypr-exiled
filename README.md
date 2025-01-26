@@ -2,6 +2,9 @@
 
 A lightweight Path of Exile 2 trade manager built for keyboard warriors and tiling WM enthusiasts.
 
+
+https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
+
 ## Who/What this is for
 
 - **NixOS** and other AppImage-restricted distros 🐧
