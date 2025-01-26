@@ -109,11 +109,30 @@ jobs:
             exit 1
           fi
 
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # Get the previous tag from version calculation
+          PREV_TAG="${{ steps.version.outputs.latest_tag }}"
+
+          # Generate changelog since last release
+          CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD)
+
+          # For empty first release
+          if [ "$PREV_TAG" = "v0.0.0" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)")
+          fi
+
+          # Escape newlines for GitHub output
+          CHANGELOG="${CHANGELOG//'%'/'%25'}"
+          CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
+          echo "changelog=${CHANGELOG}" >> $GITHUB_OUTPUT
+
       - name: Create Signed Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.NEW_VERSION }}
-          name: "v${{ env.NEW_VERSION }} - Secure Linux Release"
+          name: "v${{ env.NEW_VERSION }}"
           generate_release_notes: true
           files: |
             release/*
@@ -135,6 +154,6 @@ jobs:
             ```
 
             ## Changelog
-            $(git log --pretty=format:"- %s (%h)" $LATEST_TAG..HEAD)
+            ${{ steps.changelog.outputs.changelog }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
