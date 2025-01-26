@@ -2,7 +2,6 @@
 
 A lightweight Path of Exile 2 trade manager built for Keyboard power users and tiling WM enthusiasts.
 
-
 https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 
 ## Who/What this is for
@@ -20,6 +19,20 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 > 📝 X11 support requires `xdotool` package installed
 
 > ℹ️ Prefer traditional GUIs? Check out [Exiled-Exchange-2](https://github.com/Kvan7/Exiled-Exchange-2) for AppImage builds
+
+### Secure Releases 🔒
+
+**Verified binary available in [Releases](https://github.com/gfsd3v/hypr-exiled/releases):**
+
+````bash
+# Verify signatures (requires cosign)
+```sh
+curl -O https://raw.githubusercontent.com/yourusername/hypr-exiled/main/cosign.pub
+cosign verify-blob --key cosign.pub --signature checksums.txt.sig checksums.txt
+sha256sum -c checksums.txt
+```
+
+> 🔐 **Signed with [Sigstore Cosign](https://docs.sigstore.dev).** Public key in repo root.
 
 ### Benefits 🚀
 
@@ -40,7 +53,7 @@ Essential packages:
 ```bash
 # Core
 go alsa-lib rofi libX11 libXtst libXi libxcb xdotool # xdotool needed for X11 WMs
-```
+````
 
 ### Build & Run
 
