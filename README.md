@@ -18,26 +18,6 @@ A lightweight Path of Exile 2 trade manager built for keyboard warriors and tili
 
 > ℹ️ Prefer traditional GUIs? Check out [Exiled-Exchange-2](https://github.com/Kvan7/Exiled-Exchange-2) for AppImage builds
 
-### Architecture
-
-```
-                      +-------------------+
-                      |  Background       |
-                      |  Service          |
-                      |                   |
-                      |  (Initialized     |
-                      |   Input/WM/Config)|
-                      +-------------------+
-                            ▲  ▲  ▲
-                            |  |  |
-            +---------------+  |  +-----------------+
-            |                  |                    |
-  +---------+----------+  +----+--------+  +--------+--------+
-  | ./hypr-exiled      |  | ./hypr-exiled | | ./hypr-exiled   |
-  | -showTrades        |  | -hideout      | | (background)    |
-  +--------------------+  +---------------+ +-----------------+
-```
-
 ### Benefits 🚀
 
 - **Single initialization**: All components initialized once in background service
@@ -152,6 +132,26 @@ bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && 
 - [Config](pkg/config/DOC.MD): Configuration management
 
 ## For developers 👩‍💻
+
+### Architecture
+
+```
+                      +-------------------+
+                      |  Background       |
+                      |  Service          |
+                      |                   |
+                      |  (Initialized     |
+                      |   Input/WM/Config)|
+                      +-------------------+
+                            ▲  ▲  ▲
+                            |  |  |
+            +---------------+  |  +-----------------+
+            |                  |                    |
+  +---------+----------+  +----+--------+  +--------+--------+
+  | ./hypr-exiled      |  | ./hypr-exiled | | ./hypr-exiled   |
+  | -showTrades        |  | -hideout      | | (background)    |
+  +--------------------+  +---------------+ +-----------------+
+```
 
 ### WM Support
 
