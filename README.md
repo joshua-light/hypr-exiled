@@ -47,6 +47,7 @@ go alsa-lib rofi libX11 libXtst libXi libxcb xdotool # xdotool needed for X11 WM
 #### Using Nix Flakes
 
 ```bash
+## install nix package manager and enable flakes
 nix develop
 go build -o hypr-exiled ./cmd/hypr-exiled
 ./hypr-exiled --debug  # Start service
