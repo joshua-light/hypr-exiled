@@ -30,7 +30,7 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
   2. Handler function
   3. Client flag
 
-## Get Started 🛠️
+## Installation & Usage Guide 🛠️
 
 ### System Requirements
 
@@ -40,7 +40,7 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 - rofi
 - alsa-lib
 
-### X11 Window Managers
+### X11
 
 - xdotool
 - i3, bspwm, dwm, awesome, xmonad, etc
@@ -131,28 +131,6 @@ bindsym $mod+Shift+e exec --no-startup-id /path/to/hypr-exiled -showTrades
 # Quick hideout
 bindsym F5 exec --no-startup-id /path/to/hypr-exiled -hideout
 ```
-
-## Configuration File
-
-Create `~/.config/hypr-exiled/config.json`:
-
-```json
-{
-  "poe_log_path": "/path/to/steam/Path of Exile 2/logs/Client.txt",
-  "notify_command": "dunstify",
-  "triggers": {
-    "incoming_trade": "...",
-    "outgoing_trade": "..."
-  },
-  "commands": {
-    "finish": ["/kick {player}", "@{player} thanks!"],
-    "party": ["/invite {player}"],
-    "trade": ["/tradewith {player}"]
-  }
-}
-```
-
-Override with: `--config /path/to/config.json`
 
 ## Troubleshooting
 
