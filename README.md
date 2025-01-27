@@ -32,7 +32,7 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 
 ## Get Started 🛠️
 
-## System Requirements
+### System Requirements
 
 ### Hyprland
 
