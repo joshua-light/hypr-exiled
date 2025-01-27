@@ -39,6 +39,7 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 - Hyprland compositor
 - rofi
 - alsa-lib
+- one of: dunstify, notify-send, or zenity (for notifications)
 
 ### X11
 
@@ -46,6 +47,8 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 - i3, bspwm, dwm, awesome, xmonad, etc
 - rofi
 - alsa-lib
+- dunstify, notify-send, or zenity (for notifications)
+
 
 ## Quick Start Options
 
