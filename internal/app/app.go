@@ -22,7 +22,7 @@ type HyprExiled struct {
 	poeLogWatcher *poe_log.LogWatcher
 	TradeManager  *trade_manager.TradeManager
 	detector      *window.Detector
-	input         *input.Input // Add this field
+	input         *input.Input
 }
 
 func NewHyprExiled() (*HyprExiled, error) {

@@ -1,10 +1,9 @@
 package sound
 
 import (
+	"bytes"
 	"embed"
 	"fmt"
-	"os"
-	"time"
 
 	"github.com/gopxl/beep/v2"
 	"github.com/gopxl/beep/v2/speaker"
@@ -16,8 +15,13 @@ type SoundNotifier struct {
 }
 
 func NewSoundNotifier(assets embed.FS) (*SoundNotifier, error) {
-	// Initialize speaker with default settings
-	if err := speaker.Init(44100, 4096); err != nil {
+	// Try to initialize speaker, handle "already initialized" case
+	err := speaker.Init(44100, 4096)
+	if err != nil {
+		if err.Error() == "speaker cannot be initialized more than once" {
+			// Speaker already initialized, safe to proceed
+			return &SoundNotifier{assets: assets}, nil
+		}
 		return nil, fmt.Errorf("failed to initialize audio: %w", err)
 	}
 
@@ -32,37 +36,22 @@ func (s *SoundNotifier) PlayTradeSound() error {
 		return fmt.Errorf("failed to read sound file: %w", err)
 	}
 
-	// Create temporary file to read WAV data
-	tmpFile, err := os.CreateTemp("", "trade-*.wav")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.Write(soundData); err != nil {
-		return fmt.Errorf("failed to write sound data: %w", err)
-	}
-	tmpFile.Close()
-
-	// Open and decode the WAV file
-	f, err := os.Open(tmpFile.Name())
-	if err != nil {
-		return fmt.Errorf("failed to open temp file: %w", err)
-	}
-	defer f.Close()
-
-	streamer, _, err := wav.Decode(f)
+	// Decode directly from memory
+	streamer, _, err := wav.Decode(bytes.NewReader(soundData))
 	if err != nil {
 		return fmt.Errorf("failed to decode WAV: %w", err)
 	}
 	defer streamer.Close()
 
+	// Channel to wait for playback completion
+	done := make(chan struct{})
+
 	speaker.Play(beep.Seq(streamer, beep.Callback(func() {
-		streamer.Close()
+		close(done)
 	})))
 
-	// Wait for sound to finish playing
-	time.Sleep(time.Second)
+	// Block until playback finishes
+	<-done
 	return nil
 }
 
