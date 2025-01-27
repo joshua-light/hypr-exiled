@@ -20,19 +20,6 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 
 > ℹ️ Prefer traditional GUIs? Check out [Exiled-Exchange-2](https://github.com/Kvan7/Exiled-Exchange-2) for AppImage builds
 
-### Secure Releases 🔒
-
-**Verified binary available in [Releases](https://github.com/gfsd3v/hypr-exiled/releases):**
-
-```bash
-# Verify signatures (requires cosign)
-curl -O https://raw.githubusercontent.com/gfsd3v/hypr-exiled/main/cosign.pub
-cosign verify-blob --key cosign.pub --signature checksums.txt.sig checksums.txt
-sha256sum -c checksums.txt
-```
-
-> 🔐 **Signed with [Sigstore Cosign](https://docs.sigstore.dev).** Public key in repo root.
-
 ### Benefits 🚀
 
 - **Single initialization**: All components initialized once in background service
@@ -45,58 +32,116 @@ sha256sum -c checksums.txt
 
 ## Get Started 🛠️
 
-### Dependencies
+## System Requirements
 
-Essential packages:
+### Hyprland
 
-```bash
-# Core
-go alsa-lib rofi libX11 libXtst libXi libxcb xdotool # xdotool needed for X11 WMs
-```
+- Hyprland compositor
+- rofi
+- alsa-lib
 
-### Build & Run
+### X11 Window Managers
 
-#### Using Nix Flakes
+- xdotool
+- i3, bspwm, dwm, awesome, xmonad, etc
+- rofi
+- alsa-lib
 
-```bash
-## install nix package manager and enable flakes
-nix develop
-go build -o hypr-exiled ./cmd/hypr-exiled
-./hypr-exiled --debug  # Start service
-```
+## Quick Start Options
 
-#### Manual build
+### Option 1: Download Verified Binary
 
-Check `flake.nix` for required packages if building without Nix:
+1. Download the latest release from [GitHub Releases](https://github.com/gfsd3v/hypr-exiled/releases)
+2. Verify the binary signature (recommended):
+   ```bash
+   curl -O https://raw.githubusercontent.com/gfsd3v/hypr-exiled/main/cosign.pub
+   cosign verify-blob --key cosign.pub --signature checksums.txt.sig checksums.txt
+   sha256sum -c checksums.txt
+   ```
+   > Binaries are signed with [Sigstore Cosign](https://docs.sigstore.dev)
+
+### Option 2: Build from Source
+
+Prerequisites:
 
 - Go 1.21+
 - X11/XCB development headers
 - Rofi
 - ALSA development headers
 
-### Essential commands
+Using Nix Flakes:
 
 ```bash
-# Start background service (requires to be running for any command to work)
-./hypr-exiled
-
-# Show trades UI
-./hypr-exiled -showTrades
-
-# Warp to hideout
-./hypr-exiled -hideout
+nix develop
+go build -o hypr-exiled ./cmd/hypr-exiled
 ```
 
-### Configuration
+Manual build:
 
-Default config path: `$HOME/.config/hypr-exiled/config.json`
+```bash
+# Install dependencies first
+# Debian/Ubuntu
+sudo apt install golang alsa-lib-devel rofi libx11-devel libxtst-devel libxi-devel libxcb-devel xdotool
+
+# Arch Linux
+sudo pacman -S go alsa-lib rofi libx11 libxtst libxi libxcb xdotool
+
+# Build
+go build -o hypr-exiled ./cmd/hypr-exiled
+```
+
+## Basic Usage
+
+1. Start the background service:
+
+   ```bash
+   ./hypr-exiled --debug  # Debug mode for verbose logging
+   ```
+
+2. Available commands:
+   ```bash
+   ./hypr-exiled -showTrades  # Open trade UI
+   ./hypr-exiled -hideout     # Warp to hideout
+   ```
+
+## Window Manager Configuration
+
+After everything is running, you can bind commands to your window manager keybindings.
+
+### Hyprland
+
+Add to your `~/.config/hypr/hyprland.conf`:
+
+```bash
+# Trade UI (Mod+Shift+E)
+bind = $mainMod SHIFT, E, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/hypr-exiled -showTrades
+
+# Quick hideout (F5)
+bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/hypr-exiled -hideout
+```
+
+### i3wm
+
+Add to your `~/.config/i3/config`:
+
+```bash
+# Trade UI
+bindsym $mod+Shift+e exec --no-startup-id /path/to/hypr-exiled -showTrades
+
+# Quick hideout
+bindsym F5 exec --no-startup-id /path/to/hypr-exiled -hideout
+```
+
+## Configuration File
+
+Create `~/.config/hypr-exiled/config.json`:
 
 ```json
 {
   "poe_log_path": "/path/to/steam/Path of Exile 2/logs/Client.txt",
-  "notify_command": "dunstify", // Supports: dunstify, notify-send, zenity
+  "notify_command": "dunstify",
   "triggers": {
-    "incoming_trade": "...", // Trade message patterns
+    "incoming_trade": "...",
     "outgoing_trade": "..."
   },
   "commands": {
@@ -107,19 +152,14 @@ Default config path: `$HOME/.config/hypr-exiled/config.json`
 }
 ```
 
-Override location: `--config /path/to/config.json`
+Override with: `--config /path/to/config.json`
 
-### Hyprland Keybinds
+## Troubleshooting
 
-Add to your `hyprland.conf` (`hypr-exiled` background service must be running):
-
-```bash
-# Show trades UI when PoE 2 is focused (Mod+Shift+E)
-bind = $mainMod SHIFT, E, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/binary/hypr-exiled -showTrades
-
-# Quick hideout when PoE 2 is focused (F5)
-bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/binary/hypr-exiled -hideout
-```
+1. Use `--debug` flag for verbose logging
+2. Ensure background service is running before using commands
+3. Verify correct permissions on PoE log file
+4. Check window manager integration (`xdotool` for `X11`, `hyprctl` for Hyprland)
 
 ## Core Features ✨
 
