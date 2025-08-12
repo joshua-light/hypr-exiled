@@ -33,7 +33,7 @@ func NewInput(detector *window.Detector) (*Input, error) {
 
 func (i *Input) ExecutePoECommands(commands []string) error {
 	if !i.detector.IsActive() {
-		return fmt.Errorf("Path of Exile 2 needs to be running")
+		return fmt.Errorf("Path of Exile needs to be running")
 	}
 
 	window := i.detector.GetCurrentWindow()

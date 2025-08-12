@@ -56,7 +56,7 @@ Handles the creation of default configuration values.
 
 #### Key Components:
 - **`DefaultConfig` Function**: Creates a default configuration with predefined values for triggers, commands, and paths.
-- **`getDefaultPoeLogPath` Function**: Finds the default Path of Exile 2 log file by checking common locations.
+- **`getDefaultPoeLogPath` Function**: Finds the default Path of Exile log file by checking common locations.
 
 ---
 

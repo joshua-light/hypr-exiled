@@ -1,6 +1,6 @@
 # Hypr Exiled 🎮⚡
 
-A lightweight Path of Exile 2 trade manager built for keyboard power users and tiling WM's.
+A lightweight Path of Exile trade manager built for keyboard power users and tiling WM's.
 
 https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 
@@ -18,7 +18,6 @@ https://github.com/user-attachments/assets/5ea48204-d9b2-4690-8db5-b96446b869f4
 
 > 📝 X11 support requires `xdotool` package installed
 
-> ℹ️ Prefer traditional GUIs? Check out [Exiled-Exchange-2](https://github.com/Kvan7/Exiled-Exchange-2) for AppImage builds
 
 ### Benefits 🚀
 
@@ -117,10 +116,10 @@ Add to your `~/.config/hypr/hyprland.conf`:
 
 ```bash
 # Trade UI (Mod+Shift+E)
-bind = $mainMod SHIFT, E, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/hypr-exiled -showTrades
+bind = $mainMod SHIFT, E, exec, hyprctl activewindow | grep -q "class: steam_app_238960" && /path/to/hypr-exiled -showTrades
 
 # Quick hideout (F5)
-bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/hypr-exiled -hideout
+bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_238960" && /path/to/hypr-exiled -hideout
 ```
 
 ### i3wm
