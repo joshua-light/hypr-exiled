@@ -90,7 +90,7 @@ func (h *Hyprland) FindWindow(classNames []string) (Window, error) {
 	}
 
 	if !h.hasLoggedWaiting {
-		var message = "Waiting for PoE 2 Window..."
+		var message = "Waiting for PoE Window..."
 		log.Info(message)
 		notifier.Show(message, notify.Info)
 		h.hasLoggedWaiting = true

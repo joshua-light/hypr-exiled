@@ -75,7 +75,7 @@ func (x *X11) FindWindow(classNames []string) (Window, error) {
 	}
 
 	if !x.hasLoggedWaiting {
-		message := "Waiting for PoE 2 Window..."
+		message := "Waiting for PoE Window..."
 		log.Info(message)
 		notifier.Show(message, notify.Info)
 		x.hasLoggedWaiting = true

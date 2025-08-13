@@ -89,8 +89,8 @@ func (tm *TradeManager) AddTrade(trade models.TradeEntry) error {
 
 func (tm *TradeManager) ShowTrades() error {
 	if !tm.detector.IsActive() {
-		tm.notify.Show("PoE 2 Window not found, make sure PoE is open", notify.Info)
-		tm.log.Debug("PoE 2 window not found")
+		tm.notify.Show("PoE  Window not found, make sure PoE is open", notify.Info)
+		tm.log.Debug("PoE  window not found")
 		return nil
 	}
 	tm.log.Debug("Fetching trades from database")

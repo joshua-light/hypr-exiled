@@ -56,10 +56,11 @@ func getDefaultPoeLogPath(log *logger.Logger) (string, error) {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	// Common POE2 log paths
+	// Common POE log paths
 	possiblePaths := []string{
 		filepath.Join(home, ".local", "share", "Steam", "steamapps", "common", "Path of Exile", "logs", "Client.txt"),
 		filepath.Join(home, "Games", "Path of Exile", "logs", "Client.txt"),
+		filepath.Join("/mnt", "data", "SteamLibrary", "steamapps", "common", "Path of Exile", "logs", "Client.txt"),
 	}
 
 	for _, path := range possiblePaths {
