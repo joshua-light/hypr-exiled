@@ -134,6 +134,33 @@ bindsym $mod+Shift+e exec --no-startup-id /path/to/hypr-exiled -showTrades
 bindsym F5 exec --no-startup-id /path/to/hypr-exiled -hideout
 ```
 
+
+## Config file
+Add config file under ~/.config/hypr-exile/config.json
+
+```JSON
+{
+    "poe_log_path": "/your/SteamLibrary/steamapps/common/Path of Exile/logs/Client.txt",
+    "triggers": {
+        "incoming_trade": "\\[INFO Client \\d+\\] @From (?:<[^>]+>\\s*)?(\\S+)\\s*: Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\\d+(?:\\.\\d+)?) ([^ ]+) in ([^\\(]+) \\(stash tab \\\"([^\\\"]+)\\\"; position: left (\\d+), top (\\d+)\\)",
+        "outgoing_trade": "\\[INFO Client \\d+\\] @To (?:<[^>]+>\\s*)?(\\S+)\\s*:: Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\\d+(?:\\.\\d+)?) ([^ ]+) in ([^\\(]+) \\(stash tab \\\"([^\\\"]+)\\\"; position: left (\\d+), top (\\d+)\\)"
+    },
+    "commands": {
+        "party": [
+            "/invite {player}"
+        ],
+        "finish": [
+            "/kick {player}",
+            "@{player} thanks!"
+        ],
+        "trade": [
+            "/tradewith {player}"
+        ]
+    },
+    "notifyCommand": ""
+}
+```
+
 ## Troubleshooting
 
 1. Use `--debug` flag for verbose logging
