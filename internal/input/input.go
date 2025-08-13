@@ -86,3 +86,7 @@ func (i *Input) ExecutePoECommands(commands []string) error {
 func (i *Input) ExecuteHideout() error {
 	return i.ExecutePoECommands([]string{"/hideout"})
 }
+
+func (i *Input) ExecuteKingsmarch() error {
+	return i.ExecutePoECommands([]string{"/kingsmarch"})
+}

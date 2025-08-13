@@ -143,7 +143,7 @@ Add config file under ~/.config/hypr-exile/config.json
     "poe_log_path": "/your/SteamLibrary/steamapps/common/Path of Exile/logs/Client.txt",
     "triggers": {
         "incoming_trade": "\\[INFO Client \\d+\\] @From (?:<[^>]+>\\s*)?(\\S+)\\s*: Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\\d+(?:\\.\\d+)?) ([^ ]+) in ([^\\(]+) \\(stash tab \\\"([^\\\"]+)\\\"; position: left (\\d+), top (\\d+)\\)",
-        "outgoing_trade": "\\[INFO Client \\d+\\] @To (?:<[^>]+>\\s*)?(\\S+)\\s*:: Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\\d+(?:\\.\\d+)?) ([^ ]+) in ([^\\(]+) \\(stash tab \\\"([^\\\"]+)\\\"; position: left (\\d+), top (\\d+)\\)"
+        "outgoing_trade": "\\[INFO Client \\d+\\] @To (?:<[^>]+>\\s*)?(\\S+)\\s*: Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\\d+(?:\\.\\d+)?) ([^ ]+) in ([^\\(]+) \\(stash tab \\\"([^\\\"]+)\\\"; position: left (\\d+), top (\\d+)\\)"
     },
     "commands": {
         "party": [
