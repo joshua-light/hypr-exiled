@@ -73,6 +73,19 @@ func NewHyprExiled() (*HyprExiled, error) {
 		return nil, fmt.Errorf("failed to initialize log watcher: %w", err)
 	}
 
+	initialAppID := detector.ActiveAppID()
+	initialPath, err := config.ResolveLogPathForAppID(log, initialAppID)
+	if err != nil {
+		global.GetNotifier().Show(
+			fmt.Sprintf("Log path resolution failed for %s: %v",
+				config.GameNameByAppID(initialAppID), err),
+			notify.Error)
+		return nil, fmt.Errorf("log path resolution failed: %w", err)
+	}
+
+	log.Debug("Resolved initial log path", "app_id", initialAppID, "game", config.GameNameByAppID(initialAppID), "path", initialPath)
+	logWatcher.SetPathOverride(initialPath)
+
 	helper.poeLogWatcher = logWatcher
 	return helper, nil
 }
@@ -118,6 +131,9 @@ func (p *HyprExiled) Run() error {
 		}
 	}()
 
+	// react to AppID changes from Detector
+	go p.handleAppIDChanges()
+
 	log.Info("Service started successfully",
 		"status", "running",
 		"waiting_for", "shutdown_signal")
@@ -133,6 +149,11 @@ func (p *HyprExiled) Stop() error {
 	if p.poeLogWatcher != nil {
 		log.Debug("Stopping log watcher")
 		p.poeLogWatcher.Stop()
+	}
+
+	if p.detector != nil {
+		log.Debug("Stopping window detector")
+		_ = p.detector.Stop()
 	}
 
 	log.Info("Hypr Exiled shutdown complete",
@@ -162,5 +183,59 @@ func (p *HyprExiled) handleTradeEntry(entry models.TradeEntry) {
 			err,
 			"player", entry.PlayerName,
 			"item", entry.ItemName)
+	}
+}
+
+func (p *HyprExiled) handleAppIDChanges() {
+	log := global.GetLogger()
+	notifier := global.GetNotifier()
+	cfg := global.GetConfig()
+
+	lastAppID := p.detector.ActiveAppID()
+
+	for newAppID := range p.detector.Changes() {
+		if newAppID == lastAppID {
+			continue
+		}
+
+		gameName := cfg.GameNameByAppID(newAppID)
+		newPath, err := cfg.ResolveLogPathForAppID(log, newAppID)
+		if err != nil {
+			log.Error("Failed to resolve log path for new game", err,
+				"game", gameName,
+				"app_id", newAppID)
+			notifier.Show(fmt.Sprintf("Log path for %s not found. Set log_paths[%d] in config.", gameName, newAppID), notify.Error)
+			continue
+		}
+
+		log.Info("Switching log watcher to new game",
+			"from_app_id", lastAppID,
+			"to_app_id", newAppID,
+			"game", gameName,
+			"path", newPath)
+
+		// gracefully stop old Watcher
+		if p.poeLogWatcher != nil {
+			_ = p.poeLogWatcher.Stop()
+		}
+
+		// create & start new Watcher
+		nw, err := poe_log.NewLogWatcher(p.handleTradeEntry, p.detector)
+		if err != nil {
+			log.Error("Failed to create new log watcher after app switch", err)
+			continue
+		}
+		nw.SetPathOverride(newPath)
+		p.poeLogWatcher = nw
+
+		go func() {
+			if err := p.poeLogWatcher.Watch(); err != nil {
+				log.Error("Log watcher routine failed after app switch", err)
+				notifier.Show(fmt.Sprintf("Log watcher error: %v", err), notify.Error)
+			}
+		}()
+
+		notifier.Show(fmt.Sprintf("Switched to %s logs", cfg.GameNameByAppID(newAppID)), notify.Info)
+		lastAppID = newAppID
 	}
 }

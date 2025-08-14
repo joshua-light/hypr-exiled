@@ -46,8 +46,10 @@ func NewInput(detector *window.Detector) (*Input, error) {
 }
 
 func (i *Input) ExecutePoECommands(commands []string) error {
+	cfg := global.GetConfig()
+
 	if !i.detector.IsActive() {
-		return fmt.Errorf("Path of Exile needs to be running")
+		return fmt.Errorf("%s needs to be running", cfg.GameNameByAppID(i.detector.ActiveAppID()))
 	}
 
 	window := i.detector.GetCurrentWindow()
@@ -55,30 +57,39 @@ func (i *Input) ExecutePoECommands(commands []string) error {
 		return fmt.Errorf("failed to focus window: %w", err)
 	}
 
-	// Give PoE a moment to accept input after focusing the window.
-	time.Sleep(focusDelay)
+	// Decide profile: PoE1 = slow, PoE2 = fast
+	slowTyping := i.isSlowTypingApp()
+
+	if slowTyping {
+		// Give PoE1 a moment to accept input after focusing the window.
+		time.Sleep(focusDelay)
+	}
 
 	for _, cmd := range commands {
 		i.log.Debug("Executing PoE command", "command", cmd, "window_class", window.Class)
 
-		// Open chat.
-		robotgo.KeyTap("enter")
-		time.Sleep(chatFocusDelay) // allow the chat input to focus
+		if slowTyping {
+			// --- SLOW PROFILE (PoE1) ---
+			robotgo.KeyTap("enter")     // open chat
+			time.Sleep(chatFocusDelay)  // allow input to focus
+			robotgo.KeyTap("a", "ctrl") // clear any stale input
+			time.Sleep(clearSelectDelay)
+			robotgo.KeyTap("backspace")
+			time.Sleep(clearDeleteDelay)
 
-		// Safety: clear any existing text to avoid sending stale content.
-		robotgo.KeyTap("a", "ctrl") // select all
-		time.Sleep(clearSelectDelay)
-		robotgo.KeyTap("backspace") // delete selection
-		time.Sleep(clearDeleteDelay)
+			// Type with delay to avoid dropped characters in PoE1.
+			robotgo.TypeStrDelay(cmd, typeCharDelayMs)
+			time.Sleep(afterTypeDelay)
 
-		// Type slowly: PoE (1) can drop initial characters if typing is too fast.
-		// Depending on robotgo version this may be TypeStrDelay or TypeStrDelayed.
-		robotgo.TypeStrDelay(cmd, typeCharDelayMs)
-		time.Sleep(afterTypeDelay)
-
-		// Send the command.
-		robotgo.KeyTap("enter")
-		time.Sleep(sendCooldown) // small cooldown between commands
+			robotgo.KeyTap("enter")  // send
+			time.Sleep(sendCooldown) // small cooldown between commands
+		} else {
+			// --- FAST PROFILE (PoE2) ---
+			robotgo.KeyTap("enter")
+			robotgo.TypeStr(cmd)
+			robotgo.KeyTap("enter")
+			// No extra sleeps for PoE2
+		}
 	}
 	return nil
 }
@@ -89,4 +100,13 @@ func (i *Input) ExecuteHideout() error {
 
 func (i *Input) ExecuteKingsmarch() error {
 	return i.ExecutePoECommands([]string{"/kingsmarch"})
+}
+
+// isSlowTypingApp decides if we should use the slow typing profile.
+// Default: PoE1 → slow; PoE2 → fast.
+// This avoids magic numbers by resolving via configured game names.
+func (i *Input) isSlowTypingApp() bool {
+	cfg := global.GetConfig()
+	name := cfg.GameNameByAppID(i.detector.ActiveAppID())
+	return name == "Path of Exile" // PoE1
 }

@@ -46,9 +46,14 @@ func DefaultConfig(log *logger.Logger) (*Config, error) {
 	return config, nil
 }
 
-// getDefaultPoeLogPath finds the default Path of Exile log file.
+// getDefaultPoeLogPath finds the default Path of Exile 2 log file.
 func getDefaultPoeLogPath(log *logger.Logger) (string, error) {
-	log.Debug("Looking for default POE log path")
+	return GetDefaultPoeLogPathFor(log, "Path of Exile 2")
+}
+
+// GetDefaultPoeLogPathFor finds the default Path of Exile log file depending on the detected game.
+func GetDefaultPoeLogPathFor(log *logger.Logger, gameName string) (string, error) {
+	log.Debug("Looking for default POE log path", "game", gameName)
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -56,11 +61,9 @@ func getDefaultPoeLogPath(log *logger.Logger) (string, error) {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	// Common POE log paths
 	possiblePaths := []string{
-		filepath.Join(home, ".local", "share", "Steam", "steamapps", "common", "Path of Exile", "logs", "Client.txt"),
-		filepath.Join(home, "Games", "Path of Exile", "logs", "Client.txt"),
-		filepath.Join("/mnt", "data", "SteamLibrary", "steamapps", "common", "Path of Exile", "logs", "Client.txt"),
+		filepath.Join(home, ".local", "share", "Steam", "steamapps", "common", gameName, "logs", "Client.txt"),
+		filepath.Join(home, "Games", gameName, "logs", "Client.txt"),
 	}
 
 	for _, path := range possiblePaths {
@@ -72,5 +75,5 @@ func getDefaultPoeLogPath(log *logger.Logger) (string, error) {
 	}
 
 	log.Error("No valid POE log file found", nil, "checked_paths", possiblePaths)
-	return "", fmt.Errorf("no valid Path of Exile log file found in common locations")
+	return "", fmt.Errorf("no valid %s log file found in common locations", gameName)
 }

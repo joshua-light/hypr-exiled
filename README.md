@@ -117,9 +117,14 @@ Add to your `~/.config/hypr/hyprland.conf`:
 ```bash
 # Trade UI (Mod+Shift+E)
 bind = $mainMod SHIFT, E, exec, hyprctl activewindow | grep -q "class: steam_app_238960" && /path/to/hypr-exiled -showTrades
+bind = $mainMod SHIFT, E, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/hypr-exiled -showTrades
 
 # Quick hideout (F5)
 bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_238960" && /path/to/hypr-exiled -hideout
+bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/hypr-exiled -hideout
+
+# Quick kingsmarch (F6)
+bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_238960" && /path/to/hypr-exiled -kingsmarch
 ```
 
 ### i3wm
@@ -132,6 +137,9 @@ bindsym $mod+Shift+e exec --no-startup-id /path/to/hypr-exiled -showTrades
 
 # Quick hideout
 bindsym F5 exec --no-startup-id /path/to/hypr-exiled -hideout
+
+# Quick kingsmarch
+bindsym F6 exec --no-startup-id /path/to/hypr-exiled -kingsmarch
 ```
 
 
@@ -140,7 +148,11 @@ Add config file under ~/.config/hypr-exile/config.json
 
 ```JSON
 {
-    "poe_log_path": "/your/SteamLibrary/steamapps/common/Path of Exile/logs/Client.txt",
+    "poe_log_path": "/your/SteamLibrary/steamapps/common/Path of Exile 2/logs/Client.txt",
+    "log_paths": {
+    "238960": "/your//SteamLibrary/steamapps/common/Path of Exile/logs/Client.txt",
+    "2694490": "/your//SteamLibrary/steamapps/common/Path of Exile 2/logs/Client.txt"
+    },
     "triggers": {
         "incoming_trade": "\\[INFO Client \\d+\\] @From (?:<[^>]+>\\s*)?(\\S+)\\s*: Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\\d+(?:\\.\\d+)?) ([^ ]+) in ([^\\(]+) \\(stash tab \\\"([^\\\"]+)\\\"; position: left (\\d+), top (\\d+)\\)",
         "outgoing_trade": "\\[INFO Client \\d+\\] @To (?:<[^>]+>\\s*)?(\\S+)\\s*: Hi, I would like to buy your ([^,]+(?:,[^,]+)*) listed for (\\d+(?:\\.\\d+)?) ([^ ]+) in ([^\\(]+) \\(stash tab \\\"([^\\\"]+)\\\"; position: left (\\d+), top (\\d+)\\)"
@@ -160,6 +172,11 @@ Add config file under ~/.config/hypr-exile/config.json
     "notifyCommand": ""
 }
 ```
+
+The "poe_log_path" key is used if the game is located in a different path then the default path.
+If you have both games installed and they aren't in the default path you will need to add the game paths to the "log_paths" key.
+
+
 
 ## Troubleshooting
 
