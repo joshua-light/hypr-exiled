@@ -83,6 +83,7 @@ func (d *TradeDisplayManager) FormatTrade(trade models.TradeEntry, index int) st
 	currencySymbols := map[string]string{
 		"divine":  fmt.Sprintf("\x00icon\x1f%s", filepath.Join(config.GetAssetsDir(), "divine.png")),
 		"exalted": fmt.Sprintf("\x00icon\x1f%s", filepath.Join(config.GetAssetsDir(), "exalt.png")),
+		"chaos":   fmt.Sprintf("\x00icon\x1f%s", filepath.Join(config.GetAssetsDir(), "chaos.png")),
 	}
 
 	currencyStr := fmt.Sprintf("%.0f", trade.CurrencyAmount)
@@ -94,13 +95,16 @@ func (d *TradeDisplayManager) FormatTrade(trade models.TradeEntry, index int) st
 	if trade.CurrencyType == "exalted" {
 		currencyName = "Exs"
 	}
+	if trade.CurrencyType == "chaos" {
+		currencyName = "Chs"
+	}
 
 	symbol, exists := currencySymbols[trade.CurrencyType]
 	if !exists {
 		symbol = trade.CurrencyType
 	}
 
-	formattedTrade := fmt.Sprintf("[%d] %s %s > %s&#x0a;@%s%s",
+	formattedTrade := fmt.Sprintf("[%d] %s %s > %s&#x0a;@%s %s",
 		index, // Add an index to uniquely identify the trade
 		currencyStr,
 		currencyName,
@@ -152,7 +156,8 @@ func (d *TradeDisplayManager) DisplayTrades(trades []string) error {
 	cmd.Stdin = strings.NewReader(strings.Join(trades, "\n"))
 	d.log.Info("Executing Rofi command", "command", cmd.String())
 
-	output, err := cmd.CombinedOutput()
+	// ⬇️ nur STDOUT (keine Fontconfig-/Pango-Warnungen in der Auswahl)
+	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			d.log.Debug("Rofi exited with code", "exit_code", exitErr.ExitCode())

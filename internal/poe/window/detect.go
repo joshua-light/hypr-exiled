@@ -2,6 +2,7 @@ package window
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,8 @@ type Detector struct {
 	wmManager              *wm.Manager
 	stopChan               chan struct{}
 	stopped                bool
+	activeAppID            int
+	changeChan             chan int
 }
 
 // NewDetector creates a new POE window detector
@@ -35,18 +38,37 @@ func NewDetector() *Detector {
 		return nil
 	}
 
+	cfg := global.GetConfig()
+
 	return &Detector{
 		hyprExiledSessionStart: time.Now(),
-		windowClasses:          []string{"steam_app_2694490"},
+		windowClasses:          cfg.WindowClasses(),
 		wmManager:              manager,
 		stopChan:               make(chan struct{}),
+
+		activeAppID: cfg.GetDefaultAppID(),
+		changeChan:  make(chan int, 1),
 	}
+}
+
+func (d *Detector) Changes() <-chan int { return d.changeChan }
+func (d *Detector) ActiveAppID() int    { d.mu.RLock(); defer d.mu.RUnlock(); return d.activeAppID }
+
+func parseSteamAppID(class string) int {
+	const pref = "steam_app"
+	if !strings.HasPrefix(class, pref) {
+		return 0
+	}
+
+	id, _ := strconv.Atoi(strings.TrimPrefix(class, pref))
+	return id
 }
 
 // Detect checks for the PoE window
 func (d *Detector) Detect() error {
 	log := global.GetLogger()
 	notifier := global.GetNotifier()
+	cfg := global.GetConfig()
 
 	window, err := d.wmManager.FindWindow(d.windowClasses)
 	if err != nil {
@@ -70,6 +92,30 @@ func (d *Detector) Detect() error {
 			notifier.Show("PoE window lost", notify.Info)
 		}
 		d.isWindowActive = isActive
+	}
+
+	if isActive && window.Class != "" {
+		var id int
+		if v, ok := cfg.AppIDByWindowClass(window.Class); ok {
+			id = v
+		} else {
+			id = parseSteamAppID(window.Class) // fallback
+		}
+
+		if id != 0 && id != d.activeAppID {
+			old := d.activeAppID
+			d.activeAppID = id
+			d.windowFoundTime = time.Now() // optional: from now on allow new lines
+			log.Info("Detected different PoE variant",
+				"old_app_id", old,
+				"new_app_id", id,
+				"class", window.Class)
+			select {
+			case d.changeChan <- id:
+			default:
+				//not blocking
+			}
+		}
 	}
 
 	return nil

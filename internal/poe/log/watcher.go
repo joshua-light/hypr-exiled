@@ -20,11 +20,12 @@ import (
 var timestampRegex = regexp.MustCompile(`^\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}`)
 
 type LogWatcher struct {
-	handler     func(models.TradeEntry)
-	windowCheck *window.Detector
-	stopChan    chan struct{}
-	mu          sync.Mutex
-	stopped     bool
+	handler      func(models.TradeEntry)
+	windowCheck  *window.Detector
+	stopChan     chan struct{}
+	mu           sync.Mutex
+	stopped      bool
+	pathOverride string
 }
 
 func NewLogWatcher(handler func(models.TradeEntry), detector *window.Detector) (*LogWatcher, error) {
@@ -43,11 +44,28 @@ func NewLogWatcher(handler func(models.TradeEntry), detector *window.Detector) (
 	return watcher, nil
 }
 
-func (w *LogWatcher) Watch() error {
-	cfg, log, _ := global.GetAll()
-	log.Info("Starting log watch routine", "path", cfg.GetPoeLogPath())
+func (w *LogWatcher) SetPathOverride(p string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.pathOverride = p
+}
 
-	file, err := os.Open(cfg.GetPoeLogPath())
+func (w *LogWatcher) getActivePath() string {
+	cfg, _, _ := global.GetAll()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.pathOverride != "" {
+		return w.pathOverride
+	}
+	return cfg.GetPoeLogPath()
+}
+
+func (w *LogWatcher) Watch() error {
+	_, log, _ := global.GetAll()
+	path := w.getActivePath()
+	log.Info("Starting log watch routine", "path", path)
+
+	file, err := os.Open(path)
 	if err != nil {
 		log.Error("Failed to open log file", err)
 		return fmt.Errorf("failed to open log file: %w", err)
@@ -245,6 +263,8 @@ func (w *LogWatcher) parseTimestamp(line string) (time.Time, error) {
 	return time.Parse("2006/01/02 15:04:05", timestampStr)
 }
 
+// Stop stops only the log watching loop.
+// NOTE: The window detector lifecycle is managed by the application (app.go) and is not stopped here.
 func (w *LogWatcher) Stop() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -257,12 +277,6 @@ func (w *LogWatcher) Stop() error {
 	log.Info("Stopping log watcher")
 	// Signal the watch routine to stop
 	close(w.stopChan)
-
-	// Stop the window detector
-	if err := w.windowCheck.Stop(); err != nil {
-		log.Error("Failed to stop window detector", err)
-		return fmt.Errorf("failed to stop window detector: %w", err)
-	}
 
 	w.stopped = true
 	return nil

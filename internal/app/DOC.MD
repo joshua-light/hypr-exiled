@@ -56,4 +56,9 @@ Stop()           // Cleanup resources
 - Structured logging
 - Clean shutdown handling
 - IPC-based communication
+
+### Multi-Title (PoE1/PoE2) Support — Additions
+- Config-driven Steam apps
+- Initial log path resolution
+- Hot watcher rotation
 ```

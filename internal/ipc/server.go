@@ -100,6 +100,22 @@ func handleConnection(conn net.Conn, tradeManager *trade_manager.TradeManager, i
 				Message: "Warped to hideout",
 			}
 		}
+	case "kingsmarch":
+		log.Debug("Handling kingsmarch request")
+		if err := input.ExecuteKingsmarch(); err != nil {
+			log.Error("Kingsmarch command failed", err)
+
+			resp = Response{
+				Status:  "error",
+				Message: err.Error(),
+			}
+		} else {
+			log.Info("Kingsmarch command executed successfully")
+			resp = Response{
+				Status:  "success",
+				Message: "Warped to kingsmarch",
+			}
+		}
 	default:
 		log.Error("Unknown command received", fmt.Errorf("command: %s", req.Command))
 		resp = Response{Status: "error", Message: "Unknown command"}
