@@ -189,10 +189,29 @@ type ItemData struct {
 
 // ItemStat represents a modifier/stat on an item
 type ItemStat struct {
-	Text  string
-	Value int
-	Min   int
-	Max   int
+	Text         string
+	Value        int
+	Min          int
+	Max          int
+	ModifierType string // "prefix", "suffix", "implicit", "unknown"
+	StatID       string // Standardized stat identifier for trade API
+	IsRange      bool   // Whether this stat represents a range vs exact value
+}
+
+// StatFilter represents a single stat filter in the trade query
+type StatFilter struct {
+	ID       string  `json:"id"`
+	Value    *struct {
+		Min *int `json:"min,omitempty"`
+		Max *int `json:"max,omitempty"`
+	} `json:"value,omitempty"`
+	Disabled bool `json:"disabled,omitempty"`
+}
+
+// StatGroup represents a group of stat filters 
+type StatGroup struct {
+	Type    string       `json:"type"`    // "and", "or", "not"
+	Filters []StatFilter `json:"filters"`
 }
 
 // TradeQuery represents the JSON structure for PoE 2 trade API
@@ -201,9 +220,9 @@ type TradeQuery struct {
 		Status struct {
 			Option string `json:"option"`
 		} `json:"status"`
-		Name    string `json:"name,omitempty"`
-		Type    string `json:"type,omitempty"`
-		Stats   []interface{} `json:"stats"`
+		Name    string      `json:"name,omitempty"`
+		Type    string      `json:"type,omitempty"`
+		Stats   []StatGroup `json:"stats"`
 		Filters struct {
 			TypeFilters *struct {
 				Filters struct {
@@ -389,7 +408,14 @@ func (i *Input) parseStatLine(line string) *ItemStat {
 	numberRegex := regexp.MustCompile(`[-+]?\d+(?:\.\d+)?`)
 	numbers := numberRegex.FindAllString(cleanLine, -1)
 
-	stat := &ItemStat{Text: cleanLine}
+	stat := &ItemStat{
+		Text:         cleanLine,
+		ModifierType: "unknown",
+		IsRange:      false,
+	}
+
+	// Classify modifier type and extract stat ID
+	i.classifyModifier(stat)
 
 	if len(numbers) > 0 {
 		// Parse the first number as the main value
@@ -407,11 +433,201 @@ func (i *Input) parseStatLine(line string) *ItemStat {
 			if max, err := strconv.Atoi(numbers[1]); err == nil {
 				stat.Max = max
 				stat.Value = (stat.Min + stat.Max) / 2 // Use average as main value
+				stat.IsRange = true
 			}
 		}
 	}
 
 	return stat
+}
+
+// ModifierPattern represents a pattern for matching and classifying modifiers
+type ModifierPattern struct {
+	Pattern      *regexp.Regexp
+	StatID       string
+	ModifierType string
+	Description  string
+}
+
+// classifyModifier attempts to classify a modifier and assign a stat ID based on common PoE 2 patterns
+func (i *Input) classifyModifier(stat *ItemStat) {
+	// Using hash-based stat IDs from Exiled-Exchange-2 data for PoE 2 trade API compatibility
+	
+	// Define patterns with correct hash-based stat IDs from Exiled-Exchange-2
+	patterns := []ModifierPattern{
+		// Spell Damage (Prefix) - explicit.stat_2974417149
+		{regexp.MustCompile(`(\d+)% increased Spell Damage`), "explicit.stat_2974417149", "prefix", "Increased Spell Damage"},
+		
+		// Chaos Damage (Prefix) - explicit.stat_736967255
+		{regexp.MustCompile(`(\d+)% increased Chaos Damage`), "explicit.stat_736967255", "prefix", "Increased Chaos Damage"},
+		
+		// Mana (Prefix) - explicit.stat_1050105434
+		{regexp.MustCompile(`\+(\d+) to maximum Mana`), "explicit.stat_1050105434", "prefix", "Maximum Mana"},
+		
+		// Intelligence (Suffix) - explicit.stat_328541901
+		{regexp.MustCompile(`\+(\d+) to Intelligence`), "explicit.stat_328541901", "suffix", "Intelligence"},
+		
+		// Spell Skills Level (Prefix) - explicit.stat_124131830
+		{regexp.MustCompile(`\+(\d+) to Level of all Spell Skills`), "explicit.stat_124131830", "prefix", "Spell Skills Level"},
+		
+		// Mana on Kill (Suffix) - explicit.stat_1368271171
+		{regexp.MustCompile(`Gain (\d+) Mana per Enemy Killed`), "explicit.stat_1368271171", "suffix", "Mana on Kill"},
+		
+		// More patterns with actual stat IDs can be added as needed
+		// For now, focusing on the modifiers from your example
+		
+		// Life (Prefix) - Need to look up the actual ID
+		{regexp.MustCompile(`\+(\d+) to maximum Life`), "", "prefix", "Maximum Life"},
+		
+		// Resistances (Suffix) - Need to look up the actual IDs
+		{regexp.MustCompile(`\+(\d+)% to .* Resistance`), "", "suffix", "Resistance"},
+		
+		// Physical Damage (Prefix) - Need to look up the actual ID
+		{regexp.MustCompile(`Adds (\d+)(?:-(\d+))? Physical Damage`), "", "prefix", "Added Physical Damage"},
+		
+		// Attack/Cast Speed (Suffix) - Need to look up the actual IDs
+		{regexp.MustCompile(`(\d+)% increased Attack Speed`), "", "suffix", "Attack Speed"},
+		{regexp.MustCompile(`(\d+)% increased Cast Speed`), "", "suffix", "Cast Speed"},
+		
+		// Critical Strike (Suffix) - Need to look up the actual IDs
+		{regexp.MustCompile(`(\d+)% increased Critical Strike Chance`), "", "suffix", "Critical Strike Chance"},
+		{regexp.MustCompile(`\+(\d+)% to Critical Strike Multiplier`), "", "suffix", "Critical Strike Multiplier"},
+		
+		// Accuracy (Suffix) - Need to look up the actual ID
+		{regexp.MustCompile(`\+(\d+) to Accuracy Rating`), "", "suffix", "Accuracy Rating"},
+		
+		// Energy Shield (Prefix) - Need to look up the actual IDs
+		{regexp.MustCompile(`\+(\d+) to maximum Energy Shield`), "", "prefix", "Maximum Energy Shield"},
+		{regexp.MustCompile(`(\d+)% increased Energy Shield`), "", "prefix", "Increased Energy Shield"},
+		
+		// Armor/Evasion (Prefix) - Need to look up the actual IDs
+		{regexp.MustCompile(`(\d+)% increased Armour`), "", "prefix", "Increased Armour"},
+		{regexp.MustCompile(`(\d+)% increased Evasion Rating`), "", "prefix", "Increased Evasion"},
+		
+		// Movement Speed (Suffix) - Need to look up the actual ID
+		{regexp.MustCompile(`(\d+)% increased Movement Speed`), "", "suffix", "Movement Speed"},
+		
+		// Attributes (Suffix) - Need to look up the actual IDs
+		{regexp.MustCompile(`\+(\d+) to Strength`), "", "suffix", "Strength"},
+		{regexp.MustCompile(`\+(\d+) to Dexterity`), "", "suffix", "Dexterity"},
+		{regexp.MustCompile(`\+(\d+) to all Attributes`), "", "suffix", "All Attributes"},
+	}
+
+	// Try to match against known patterns
+	for _, pattern := range patterns {
+		if pattern.Pattern.MatchString(stat.Text) {
+			stat.StatID = pattern.StatID
+			stat.ModifierType = pattern.ModifierType
+			i.log.Debug("Classified modifier", "text", stat.Text, "type", stat.ModifierType, "description", pattern.Description)
+			return
+		}
+	}
+
+	// If no pattern matched, try to make a best guess based on common conventions
+	i.classifyByConvention(stat)
+}
+
+// classifyByConvention makes a best guess classification when exact patterns don't match
+func (i *Input) classifyByConvention(stat *ItemStat) {
+	text := strings.ToLower(stat.Text)
+	
+	// Common prefix indicators (usually defensive or damage stats)
+	prefixIndicators := []string{
+		"increased", "adds", "maximum life", "maximum mana", "maximum energy shield", 
+		"spell damage", "physical damage", "chaos damage", "fire damage", "cold damage", "lightning damage",
+		"level of", "grants skill",
+	}
+	
+	// Common suffix indicators (usually utility stats)
+	suffixIndicators := []string{
+		"resistance", "accuracy", "critical strike", "attack speed", "cast speed", "movement speed",
+		"intelligence", "strength", "dexterity", "per enemy killed", "on kill",
+	}
+	
+	// Check for prefix patterns
+	for _, indicator := range prefixIndicators {
+		if strings.Contains(text, indicator) {
+			stat.ModifierType = "prefix"
+			stat.StatID = fmt.Sprintf("explicit.stat_%s", strings.ReplaceAll(indicator, " ", "_"))
+			i.log.Debug("Classified as prefix by convention", "text", stat.Text, "indicator", indicator)
+			return
+		}
+	}
+	
+	// Check for suffix patterns  
+	for _, indicator := range suffixIndicators {
+		if strings.Contains(text, indicator) {
+			stat.ModifierType = "suffix" 
+			stat.StatID = fmt.Sprintf("explicit.stat_%s", strings.ReplaceAll(indicator, " ", "_"))
+			i.log.Debug("Classified as suffix by convention", "text", stat.Text, "indicator", indicator)
+			return
+		}
+	}
+	
+	// Default to unknown
+	i.log.Debug("Could not classify modifier", "text", stat.Text)
+	stat.ModifierType = "unknown"
+	stat.StatID = ""
+}
+
+// buildStatFilters converts ItemStats to StatFilters for the trade query
+func (i *Input) buildStatFilters(stats []ItemStat) []StatFilter {
+	var filters []StatFilter
+	var classifiedCount = 0
+	
+	for _, stat := range stats {
+		// Count classified stats for logging
+		if stat.ModifierType != "unknown" {
+			classifiedCount++
+		}
+		
+		// Skip stats that don't have a stat ID (since we don't have the PoE 2 hash-based IDs)
+		if stat.StatID == "" {
+			i.log.Debug("Skipping stat without API ID", "text", stat.Text, "type", stat.ModifierType)
+			continue
+		}
+		
+		filter := StatFilter{
+			ID:       stat.StatID,
+			Disabled: false,
+		}
+		
+		// Add value constraints based on the stat values
+		if stat.Value > 0 {
+			filter.Value = &struct {
+				Min *int `json:"min,omitempty"`
+				Max *int `json:"max,omitempty"`
+			}{}
+			
+			// For exact values or small ranges, use tight constraints
+			if !stat.IsRange || (stat.Max - stat.Min) <= 2 {
+				// Use 80% of the stat value as minimum to find similar items
+				minValue := int(float64(stat.Value) * 0.8)
+				filter.Value.Min = &minValue
+				i.log.Debug("Added exact stat filter", "id", stat.StatID, "min", minValue, "text", stat.Text)
+			} else {
+				// For ranges, use the minimum value as the search constraint
+				minValue := stat.Min
+				filter.Value.Min = &minValue
+				i.log.Debug("Added range stat filter", "id", stat.StatID, "min", minValue, "text", stat.Text)
+			}
+		}
+		
+		filters = append(filters, filter)
+	}
+	
+	// Log the classification results
+	if classifiedCount > 0 {
+		i.log.Info("Classified modifiers for search", 
+			"total", len(stats), 
+			"classified", classifiedCount, 
+			"with_api_ids", len(filters))
+		if len(filters) == 0 {
+			i.log.Info("No stat filters added", "reason", "Some modifiers don't have hash-based stat IDs yet")
+		}
+	}
+	
+	return filters
 }
 
 // buildAdvancedTradeSearchURL constructs a PoE 2 trade site URL with comprehensive search parameters
@@ -421,7 +637,7 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 	// Basic query setup
 	query.Query.Status.Option = "online"
 	query.Sort.Price = "asc"
-	query.Query.Stats = make([]interface{}, 0)
+	query.Query.Stats = make([]StatGroup, 0)
 
 	// Set item name/type
 	if item.Name != "" {
@@ -493,6 +709,21 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 		query.Query.Filters.MiscFilters.Filters.Corrupted = &struct {
 			Option string `json:"option,omitempty"`
 		}{Option: "true"}
+	}
+
+	// Add stat filters from parsed modifiers
+	statFilters := i.buildStatFilters(item.Stats)
+	if len(statFilters) > 0 {
+		statGroup := StatGroup{
+			Type:    "and",
+			Filters: statFilters,
+		}
+		query.Query.Stats = append(query.Query.Stats, statGroup)
+		i.log.Info("Added stat filters to search", "count", len(statFilters))
+	} else if len(item.Stats) > 0 {
+		i.log.Info("Using basic search", 
+			"parsed_stats", len(item.Stats),
+			"reason", "No modifiers matched known stat IDs")
 	}
 
 	// Serialize the query to JSON
