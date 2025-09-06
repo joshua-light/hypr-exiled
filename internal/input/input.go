@@ -176,6 +176,7 @@ func (i *Input) ExecuteSearch() error {
 type ItemData struct {
 	Name        string
 	BaseType    string
+	ItemClass   string // Item Class: Wands, Armours, etc.
 	Rarity      string
 	ItemLevel   int
 	Quality     int
@@ -220,12 +221,13 @@ type TradeQuery struct {
 		Status struct {
 			Option string `json:"option"`
 		} `json:"status"`
-		Name    string      `json:"name,omitempty"`
-		Type    string      `json:"type,omitempty"`
 		Stats   []StatGroup `json:"stats"`
 		Filters struct {
 			TypeFilters *struct {
 				Filters struct {
+					Category *struct {
+						Option string `json:"option,omitempty"`
+					} `json:"category,omitempty"`
 					Quality *struct {
 						Min int `json:"min,omitempty"`
 					} `json:"quality,omitempty"`
@@ -271,8 +273,10 @@ func (i *Input) parseItemData(clipboardText string) (*ItemData, error) {
 	// Parse PoE 2 format: first few lines contain item class, rarity, name, base type
 	lineIndex := 0
 	
-	// Skip "Item Class:" line if present
+	// Parse "Item Class:" line if present
 	if strings.HasPrefix(firstLine, "Item Class:") {
+		item.ItemClass = strings.TrimSpace(strings.TrimPrefix(firstLine, "Item Class:"))
+		i.log.Debug("Parsed item class", "class", item.ItemClass)
 		lineIndex = 1
 	}
 
@@ -397,6 +401,12 @@ func (i *Input) parseStatLine(line string) *ItemStat {
 		if strings.HasPrefix(cleanLine, prefix) {
 			return nil
 		}
+	}
+
+	// Skip rune-based modifiers (contains "(rune)" in the text)
+	if strings.Contains(cleanLine, "(rune)") {
+		i.log.Debug("Skipping rune modifier", "text", cleanLine)
+		return nil
 	}
 
 	// Skip short non-meaningful lines
@@ -630,6 +640,46 @@ func (i *Input) buildStatFilters(stats []ItemStat) []StatFilter {
 	return filters
 }
 
+// mapItemClassToCategory maps PoE 2 item classes to API category format
+func (i *Input) mapItemClassToCategory(itemClass string) string {
+	// Map item classes to API category format based on the API structure
+	categoryMap := map[string]string{
+		"Wands":           "weapon.wand",
+		"Swords":          "weapon.sword",
+		"Axes":            "weapon.axe",
+		"Maces":           "weapon.mace",
+		"Daggers":         "weapon.dagger",
+		"Claws":           "weapon.claw",
+		"Bows":            "weapon.bow",
+		"Crossbows":       "weapon.crossbow",
+		"Staves":          "weapon.staff",
+		"Sceptres":        "weapon.sceptre",
+		"Flails":          "weapon.flail",
+		"Spears":          "weapon.spear",
+		"Shields":         "armour.shield",
+		"Helmets":         "armour.helmet",
+		"Body Armours":    "armour.chest",
+		"Gloves":          "armour.gloves",
+		"Boots":           "armour.boots",
+		"Belts":           "accessory.belt",
+		"Rings":           "accessory.ring",
+		"Amulets":         "accessory.amulet",
+		"Jewels":          "jewel",
+		"Maps":            "map",
+		"Currency":        "currency",
+		"Divination Cards": "card",
+		"Gems":            "gem",
+	}
+	
+	if category, exists := categoryMap[itemClass]; exists {
+		i.log.Debug("Mapped item class to category", "class", itemClass, "category", category)
+		return category
+	}
+	
+	i.log.Debug("No category mapping found for item class", "class", itemClass)
+	return ""
+}
+
 // buildAdvancedTradeSearchURL constructs a PoE 2 trade site URL with comprehensive search parameters
 func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 	query := TradeQuery{}
@@ -639,22 +689,41 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 	query.Sort.Price = "asc"
 	query.Query.Stats = make([]StatGroup, 0)
 
-	// Set item name/type
-	if item.Name != "" {
-		if item.Rarity == "unique" {
-			query.Query.Name = item.Name
-		} else if item.BaseType != "" {
-			query.Query.Type = item.BaseType
-		} else {
-			query.Query.Type = item.Name
+	// Set item category based on Item Class for broader search
+	if item.ItemClass != "" {
+		category := i.mapItemClassToCategory(item.ItemClass)
+		if category != "" {
+			if query.Query.Filters.TypeFilters == nil {
+				query.Query.Filters.TypeFilters = &struct {
+					Filters struct {
+						Category *struct {
+							Option string `json:"option,omitempty"`
+						} `json:"category,omitempty"`
+						Quality *struct {
+							Min int `json:"min,omitempty"`
+						} `json:"quality,omitempty"`
+						ItemLevel *struct {
+							Min int `json:"min,omitempty"`
+							Max int `json:"max,omitempty"`
+						} `json:"ilvl,omitempty"`
+					} `json:"filters"`
+				}{}
+			}
+			query.Query.Filters.TypeFilters.Filters.Category = &struct {
+				Option string `json:"option,omitempty"`
+			}{Option: category}
+			i.log.Debug("Set category filter", "category", category)
 		}
 	}
 
-	// Add filters
+	// Add quality filter only if item has quality
 	if item.Quality > 0 {
 		if query.Query.Filters.TypeFilters == nil {
 			query.Query.Filters.TypeFilters = &struct {
 				Filters struct {
+					Category *struct {
+						Option string `json:"option,omitempty"`
+					} `json:"category,omitempty"`
 					Quality *struct {
 						Min int `json:"min,omitempty"`
 					} `json:"quality,omitempty"`
@@ -670,46 +739,7 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 		}{Min: item.Quality}
 	}
 
-	if item.ItemLevel > 0 {
-		if query.Query.Filters.TypeFilters == nil {
-			query.Query.Filters.TypeFilters = &struct {
-				Filters struct {
-					Quality *struct {
-						Min int `json:"min,omitempty"`
-					} `json:"quality,omitempty"`
-					ItemLevel *struct {
-						Min int `json:"min,omitempty"`
-						Max int `json:"max,omitempty"`
-					} `json:"ilvl,omitempty"`
-				} `json:"filters"`
-			}{}
-		}
-		// Allow some range around the item level
-		minLevel := item.ItemLevel - 5
-		maxLevel := item.ItemLevel + 5
-		if minLevel < 1 {
-			minLevel = 1
-		}
-		query.Query.Filters.TypeFilters.Filters.ItemLevel = &struct {
-			Min int `json:"min,omitempty"`
-			Max int `json:"max,omitempty"`
-		}{Min: minLevel, Max: maxLevel}
-	}
-
-	if item.Corrupted {
-		if query.Query.Filters.MiscFilters == nil {
-			query.Query.Filters.MiscFilters = &struct {
-				Filters struct {
-					Corrupted *struct {
-						Option string `json:"option,omitempty"`
-					} `json:"corrupted,omitempty"`
-				} `json:"filters"`
-			}{}
-		}
-		query.Query.Filters.MiscFilters.Filters.Corrupted = &struct {
-			Option string `json:"option,omitempty"`
-		}{Option: "true"}
-	}
+	// Removed item level and corruption filters for broader search results
 
 	// Add stat filters from parsed modifiers
 	statFilters := i.buildStatFilters(item.Stats)
