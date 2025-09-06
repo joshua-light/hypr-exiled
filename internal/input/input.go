@@ -1,13 +1,14 @@
 package input
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/url"
-	"os/exec"
-	"regexp"
-	"strconv"
-	"strings"
+    "encoding/json"
+    "fmt"
+    "math"
+    "net/url"
+    "os/exec"
+    "regexp"
+    "strconv"
+    "strings"
 	"time"
 
 	"github.com/go-vgo/robotgo"
@@ -18,6 +19,8 @@ import (
 
 	"hypr-exiled/internal/poe/window"
 	"hypr-exiled/internal/wm"
+
+	"hypr-exiled/internal/input/statsmap"
 )
 
 type Input struct {
@@ -119,7 +122,7 @@ func (i *Input) isSlowTypingApp() bool {
 
 // ExecuteSearch extracts item text from clipboard, parses it, and opens PoE 2 trade site
 func (i *Input) ExecuteSearch() error {
-	cfg := global.GetConfig()
+    cfg := global.GetConfig()
 
 	if !i.detector.IsActive() {
 		return fmt.Errorf("%s needs to be running", cfg.GameNameByAppID(i.detector.ActiveAppID()))
@@ -152,8 +155,12 @@ func (i *Input) ExecuteSearch() error {
 
 	i.log.Debug("Extracted item text", "text", clipboardText)
 
-	// Parse the full item data
-	itemData, err := i.parseItemData(clipboardText)
+    // Ensure external stat mapping is loaded before parsing/classifying modifiers
+    // so that classifyModifier can resolve hashed stat IDs.
+    statsmap.Load()
+
+    // Parse the full item data
+    itemData, err := i.parseItemData(clipboardText)
 	if err != nil {
 		return fmt.Errorf("failed to parse item data: %w", err)
 	}
@@ -161,6 +168,8 @@ func (i *Input) ExecuteSearch() error {
 	i.log.Debug("Parsed item data", "item", itemData)
 
 	// Construct PoE 2 trade site URL with full search parameters
+	// Initialize external stats mapping if available (from Exiled-Exchange-2)
+	statsmap.Load()
 	tradeURL := i.buildAdvancedTradeSearchURL(itemData)
 	i.log.Debug("Opening trade URL", "url", tradeURL)
 
@@ -211,8 +220,8 @@ type StatFilter struct {
 
 // StatGroup represents a group of stat filters 
 type StatGroup struct {
-	Type    string       `json:"type"`    // "and", "or", "not"
-	Filters []StatFilter `json:"filters"`
+    Type    string       `json:"type"`    // "and", "or", "not"
+    Filters []StatFilter `json:"filters"`
 }
 
 // TradeQuery represents the JSON structure for PoE 2 trade API
@@ -258,12 +267,12 @@ func (i *Input) parseItemData(clipboardText string) (*ItemData, error) {
 		return nil, fmt.Errorf("empty clipboard text")
 	}
 
-	item := &ItemData{
-		Properties:   make(map[string]string),
-		Requirements: make(map[string]int),
-		Stats:        make([]ItemStat, 0),
-		League:       "Standard", // Default league, could be configured
-	}
+    item := &ItemData{
+        Properties:   make(map[string]string),
+        Requirements: make(map[string]int),
+        Stats:        make([]ItemStat, 0),
+        League:       "Rise of the Abyssal", // Default PoE 2 league
+    }
 
 	// Remove quantity prefix if present in first line
 	firstLine := strings.TrimSpace(lines[0])
@@ -385,17 +394,20 @@ func (i *Input) parseStatLine(line string) *ItemStat {
 	}
 
 	// Skip lines that are not modifiers/stats
-	skipPrefixes := []string{
-		"Item Class:",
-		"Rarity:",
-		"Requires:",
-		"Requirements:",
-		"Item Level:",
-		"Quality:",
-		"Sockets:",
-		"Grants Skill:",
-		"--------",
-	}
+    skipPrefixes := []string{
+        "Item Class:",
+        "Rarity:",
+        "Requires:",
+        "Requirements:",
+        "Item Level:",
+        "Quality:",
+        "Sockets:",
+        "Armour:",
+        "Evasion Rating:",
+        "Energy Shield:",
+        "Grants Skill:",
+        "--------",
+    }
 
 	for _, prefix := range skipPrefixes {
 		if strings.HasPrefix(cleanLine, prefix) {
@@ -415,8 +427,8 @@ func (i *Input) parseStatLine(line string) *ItemStat {
 	}
 
 	// Try to extract numeric values from the line
-	numberRegex := regexp.MustCompile(`[-+]?\d+(?:\.\d+)?`)
-	numbers := numberRegex.FindAllString(cleanLine, -1)
+    numberRegex := regexp.MustCompile(`[-+]?\d+(?:\.\d+)?`)
+    numbers := numberRegex.FindAllString(cleanLine, -1)
 
 	stat := &ItemStat{
 		Text:         cleanLine,
@@ -427,41 +439,82 @@ func (i *Input) parseStatLine(line string) *ItemStat {
 	// Classify modifier type and extract stat ID
 	i.classifyModifier(stat)
 
-	if len(numbers) > 0 {
-		// Parse the first number as the main value
-		if val, err := strconv.Atoi(numbers[0]); err == nil {
-			stat.Value = val
-			stat.Min = val
-			stat.Max = val
-		}
+    if len(numbers) > 0 {
+        // Parse first number; support integer or decimal
+        if val, err := strconv.Atoi(numbers[0]); err == nil {
+            stat.Value = val
+            stat.Min = val
+            stat.Max = val
+        } else if f, err := strconv.ParseFloat(numbers[0], 64); err == nil {
+            iv := int(math.Round(f))
+            stat.Value = iv
+            stat.Min = iv
+            stat.Max = iv
+        }
 
-		// If there are two numbers, treat them as min/max range
-		if len(numbers) >= 2 {
-			if min, err := strconv.Atoi(numbers[0]); err == nil {
-				stat.Min = min
-			}
-			if max, err := strconv.Atoi(numbers[1]); err == nil {
-				stat.Max = max
-				stat.Value = (stat.Min + stat.Max) / 2 // Use average as main value
-				stat.IsRange = true
-			}
-		}
-	}
+        // If there are two numbers, treat them as min/max range; support decimals
+        if len(numbers) >= 2 {
+            if min, err := strconv.Atoi(numbers[0]); err == nil {
+                stat.Min = min
+            } else if f, err := strconv.ParseFloat(numbers[0], 64); err == nil {
+                stat.Min = int(math.Round(f))
+            }
+            if max, err := strconv.Atoi(numbers[1]); err == nil {
+                stat.Max = max
+            } else if f, err := strconv.ParseFloat(numbers[1], 64); err == nil {
+                stat.Max = int(math.Round(f))
+            }
+            stat.Value = (stat.Min + stat.Max) / 2 // Use average as main value
+            stat.IsRange = true
+        }
+    }
 
 	return stat
 }
 
 // ModifierPattern represents a pattern for matching and classifying modifiers
 type ModifierPattern struct {
-	Pattern      *regexp.Regexp
-	StatID       string
-	ModifierType string
-	Description  string
+    Pattern      *regexp.Regexp
+    StatID       string
+    ModifierType string
+    Description  string
+}
+
+// normalizeToMatcher converts a raw stat text to the Exiled-Exchange matcher format
+// by replacing numeric literals with '#' and collapsing whitespace.
+func normalizeToMatcher(s string) string {
+    // Remove color/format braces if any remain
+    s = regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(s, "")
+    s = strings.TrimSpace(s)
+    // Replace numbers (including optional sign or decimal) with '#'
+    s = regexp.MustCompile(`[-+]?\d+(?:\.\d+)?`).ReplaceAllString(s, "#")
+    // Normalize whitespace
+    s = strings.Join(strings.Fields(s), " ")
+    return s
 }
 
 // classifyModifier attempts to classify a modifier and assign a stat ID based on common PoE 2 patterns
 func (i *Input) classifyModifier(stat *ItemStat) {
-	// Using hash-based stat IDs from Exiled-Exchange-2 data for PoE 2 trade API compatibility
+    // First, try to resolve using Exiled-Exchange-2 data if available
+    norm := normalizeToMatcher(stat.Text)
+    if id, ok := statsmap.FindID(norm); ok {
+        stat.StatID = id
+        // We don't need exact prefix/suffix for trade, but try a simple guess
+        if strings.Contains(strings.ToLower(stat.Text), "resistance") ||
+            strings.Contains(strings.ToLower(stat.Text), "accuracy") ||
+            strings.Contains(strings.ToLower(stat.Text), "critical") ||
+            strings.Contains(strings.ToLower(stat.Text), "speed") ||
+            strings.Contains(strings.ToLower(stat.Text), "intelligence") ||
+            strings.Contains(strings.ToLower(stat.Text), "strength") ||
+            strings.Contains(strings.ToLower(stat.Text), "dexterity") {
+            stat.ModifierType = "suffix"
+        } else {
+            stat.ModifierType = "prefix"
+        }
+        i.log.Debug("Matched stat via external mapping", "text", stat.Text, "matcher", norm, "id", id)
+        return
+    }
+    // Using limited built-in patterns as fallback for PoE 2 trade API compatibility
 	
 	// Define patterns with correct hash-based stat IDs from Exiled-Exchange-2
 	patterns := []ModifierPattern{
@@ -528,7 +581,7 @@ func (i *Input) classifyModifier(stat *ItemStat) {
 		{regexp.MustCompile(`\+(\d+) to all Attributes`), "", "suffix", "All Attributes"},
 	}
 
-	// Try to match against known patterns
+    // Try to match against built-in patterns (fallback)
 	for _, pattern := range patterns {
 		if pattern.Pattern.MatchString(stat.Text) {
 			stat.StatID = pattern.StatID
@@ -586,9 +639,9 @@ func (i *Input) classifyByConvention(stat *ItemStat) {
 }
 
 // buildStatFilters converts ItemStats to StatFilters for the trade query
-func (i *Input) buildStatFilters(stats []ItemStat) []StatFilter {
-	var filters []StatFilter
-	var classifiedCount = 0
+func (i *Input) buildStatFilters(stats []ItemStat, category string) []StatFilter {
+    var filters []StatFilter
+    var classifiedCount = 0
 	
 	for _, stat := range stats {
 		// Count classified stats for logging
@@ -602,10 +655,18 @@ func (i *Input) buildStatFilters(stats []ItemStat) []StatFilter {
 			continue
 		}
 		
-		filter := StatFilter{
-			ID:       stat.StatID,
-			Disabled: false,
-		}
+        filter := StatFilter{
+            ID:       stat.StatID,
+            Disabled: false,
+        }
+
+        // Contextual fix: prefer local maximum Energy Shield on armour pieces
+        if filter.ID == "explicit.stat_3489782002" { // generic max ES
+            if strings.HasPrefix(category, "armour.") {
+                filter.ID = "explicit.stat_4052037485" // local max ES (armour)
+                i.log.Debug("Adjusted stat to local ES for armour", "from", "explicit.stat_3489782002", "to", filter.ID, "text", stat.Text)
+            }
+        }
 		
 		// Add value constraints based on the stat values with ±10% range
 		if stat.Value > 0 {
@@ -648,7 +709,7 @@ func (i *Input) buildStatFilters(stats []ItemStat) []StatFilter {
 		}
 	}
 	
-	return filters
+    return filters
 }
 
 // mapItemClassToCategory maps PoE 2 item classes to API category format
@@ -701,10 +762,10 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 	query.Sort.Price = "asc"
 	query.Query.Stats = make([]StatGroup, 0)
 
-	// Set item category based on Item Class for broader search
-	if item.ItemClass != "" {
-		category := i.mapItemClassToCategory(item.ItemClass)
-		if category != "" {
+    // Set item category based on Item Class for broader search
+    if item.ItemClass != "" {
+        category := i.mapItemClassToCategory(item.ItemClass)
+        if category != "" {
 			if query.Query.Filters.TypeFilters == nil {
 				query.Query.Filters.TypeFilters = &struct {
 					Filters struct {
@@ -721,40 +782,24 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 					} `json:"filters"`
 				}{}
 			}
-			query.Query.Filters.TypeFilters.Filters.Category = &struct {
-				Option string `json:"option,omitempty"`
-			}{Option: category}
-			i.log.Debug("Set category filter", "category", category)
-		}
-	}
+            query.Query.Filters.TypeFilters.Filters.Category = &struct {
+                Option string `json:"option,omitempty"`
+            }{Option: category}
+            i.log.Debug("Set category filter", "category", category)
+        }
+    }
 
-	// Add quality filter only if item has quality
-	if item.Quality > 0 {
-		if query.Query.Filters.TypeFilters == nil {
-			query.Query.Filters.TypeFilters = &struct {
-				Filters struct {
-					Category *struct {
-						Option string `json:"option,omitempty"`
-					} `json:"category,omitempty"`
-					Quality *struct {
-						Min int `json:"min,omitempty"`
-					} `json:"quality,omitempty"`
-					ItemLevel *struct {
-						Min int `json:"min,omitempty"`
-						Max int `json:"max,omitempty"`
-					} `json:"ilvl,omitempty"`
-				} `json:"filters"`
-			}{}
-		}
-		query.Query.Filters.TypeFilters.Filters.Quality = &struct {
-			Min int `json:"min,omitempty"`
-		}{Min: item.Quality}
-	}
+    // Intentionally ignore quality to broaden price checks
 
 	// Removed item level and corruption filters for broader search results
 
 	// Add stat filters from parsed modifiers
-	statFilters := i.buildStatFilters(item.Stats)
+    // Build stat filters with context (category)
+    var currentCategory string
+    if item.ItemClass != "" {
+        currentCategory = i.mapItemClassToCategory(item.ItemClass)
+    }
+    statFilters := i.buildStatFilters(item.Stats, currentCategory)
 	if len(statFilters) > 0 {
 		statGroup := StatGroup{
 			Type:    "and",
@@ -772,20 +817,20 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 	queryJSON, err := json.Marshal(query)
 	if err != nil {
 		i.log.Error("Failed to marshal trade query", err)
-		// Fallback to simple search
-		return i.buildSimpleTradeSearchURL(item.Name)
-	}
+        // Fallback to simple search
+        return i.buildSimpleTradeSearchURL(item.League, item.Name)
+    }
 
 	// Construct the final URL
-	baseURL := fmt.Sprintf("https://www.pathofexile.com/trade2/search/poe2/%s", item.League)
+    baseURL := fmt.Sprintf("https://www.pathofexile.com/trade2/search/poe2/%s", url.PathEscape(item.League))
 	encodedQuery := url.QueryEscape(string(queryJSON))
 	
 	return fmt.Sprintf("%s?q=%s", baseURL, encodedQuery)
 }
 
 // buildSimpleTradeSearchURL constructs a simple PoE 2 trade site URL as fallback
-func (i *Input) buildSimpleTradeSearchURL(itemName string) string {
-	baseURL := "https://www.pathofexile.com/trade2/search/poe2/Standard"
+func (i *Input) buildSimpleTradeSearchURL(league string, itemName string) string {
+    baseURL := fmt.Sprintf("https://www.pathofexile.com/trade2/search/poe2/%s", url.PathEscape(league))
 	
 	// Create a simple query structure
 	simpleQuery := map[string]interface{}{
