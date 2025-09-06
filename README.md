@@ -104,6 +104,7 @@ go build -o hypr-exiled ./cmd/hypr-exiled
    ```bash
    ./hypr-exiled -showTrades  # Open trade UI
    ./hypr-exiled -hideout     # Warp to hideout
+   ./hypr-exiled -search      # Search hovered item on PoE 2 trade site
    ```
 
 ## Window Manager Configuration
@@ -124,7 +125,12 @@ bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_238960" && /
 bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/hypr-exiled -hideout
 
 # Quick kingsmarch (F6)
-bind = , F5, exec, hyprctl activewindow | grep -q "class: steam_app_238960" && /path/to/hypr-exiled -kingsmarch
+bind = , F6, exec, hyprctl activewindow | grep -q "class: steam_app_238960" && /path/to/hypr-exiled -kingsmarch
+bind = , F6, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/hypr-exiled -kingsmarch
+
+# Item search (F7)
+bind = , F7, exec, hyprctl activewindow | grep -q "class: steam_app_238960" && /path/to/hypr-exiled -search
+bind = , F7, exec, hyprctl activewindow | grep -q "class: steam_app_2694490" && /path/to/hypr-exiled -search
 ```
 
 ### i3wm
@@ -140,7 +146,48 @@ bindsym F5 exec --no-startup-id /path/to/hypr-exiled -hideout
 
 # Quick kingsmarch
 bindsym F6 exec --no-startup-id /path/to/hypr-exiled -kingsmarch
+
+# Item search
+bindsym F7 exec --no-startup-id /path/to/hypr-exiled -search
 ```
+
+## PoE 2 Trade Site Integration 🛒
+
+The new search feature allows you to quickly search for items on the official PoE 2 trade site:
+
+1. **Hover over an item** in Path of Exile 2
+2. **Press your configured hotkey** (default: F7)
+3. The tool will:
+   - Automatically copy the item to clipboard (Ctrl+C)
+   - Parse the complete item tooltip (name, stats, quality, item level, etc.)
+   - Construct an advanced search query with proper filters
+   - Open your default browser with pre-filled search parameters on https://www.pathofexile.com/trade2
+
+### Advanced Item Parsing
+
+The tool performs comprehensive item analysis by extracting:
+
+**Basic Item Information:**
+- Item name and base type
+- Rarity (Normal, Magic, Rare, Unique)
+- Item level and quality percentage
+- Corruption status and socket count
+
+**Search Parameters:**
+- Automatically constructs JSON query matching the official PoE 2 trade API format
+- Includes item filters (quality, item level, corruption)  
+- Uses appropriate search terms (unique name vs base type)
+- Fallback to simple name search if parsing fails
+
+**Smart Filtering:**
+- Item level searches with ±5 level range for better results
+- Quality filtering for enhanced items
+- Corruption status filtering for exact matches
+- Online-only listings by default
+
+### Browser Compatibility
+
+Works with any default browser on Linux via `xdg-open` command.
 
 
 ## Config file
@@ -189,6 +236,7 @@ If you have both games installed and they aren't in the default path you will ne
 
 - Real-time trade monitoring 🔍
 - Rofi-powered keyboard interface 🎨
+- **PoE 2 Trade Site Integration**: Hover over items and press a hotkey to automatically search them on the official PoE 2 trade site 🛒
 - Theoretical X11 support (untested) via `xdotool`:
   - Should work on common X11 distributions (Arch, Debian, Ubuntu, Fedora)
   - Compatible with tiling WMs like i3, bspwm, dwm, awesome, xmonad

@@ -25,6 +25,7 @@ func main() {
 	showTrades := flag.Bool("showTrades", false, "show the trades UI")
 	hideout := flag.Bool("hideout", false, "go to hideout")
 	kingsmarch := flag.Bool("kingsmarch", false, "go to kingsmarch")
+	search := flag.Bool("search", false, "search item on PoE 2 trade site")
 	flag.Parse()
 
 	// Initialize logger
@@ -51,6 +52,8 @@ func main() {
 		handleHideout(log, *configPath)
 	case *kingsmarch:
 		handleKingsmarch(log, *configPath)
+	case *search:
+		handleSearch(log, *configPath)
 	default:
 		startBackgroundService(log, *configPath)
 	}
@@ -157,6 +160,31 @@ func handleKingsmarch(log *logger.Logger, configPath string) {
 	}
 
 	log.Info("Kingsmarch command executed via IPC")
+}
+
+func handleSearch(log *logger.Logger, configPath string) {
+	_, cleanup, err := initializeCommon(log, configPath)
+	if err != nil {
+		log.Error("Initialization failed", err)
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		return
+	}
+	defer cleanup()
+
+	resp, err := ipc.SendCommand("search")
+	if err != nil {
+		log.Error("Search command failed", err)
+		global.GetNotifier().Show("Failed to contact service", notify.Error)
+		return
+	}
+
+	if resp.Status != "success" {
+		log.Error("Search failed", fmt.Errorf(resp.Message))
+		global.GetNotifier().Show(resp.Message, notify.Error)
+		return
+	}
+
+	log.Info("Search command executed via IPC")
 }
 
 func initializeCommon(log *logger.Logger, configPath string) (*config.Config, func(), error) {

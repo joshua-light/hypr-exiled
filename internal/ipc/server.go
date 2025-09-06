@@ -116,6 +116,22 @@ func handleConnection(conn net.Conn, tradeManager *trade_manager.TradeManager, i
 				Message: "Warped to kingsmarch",
 			}
 		}
+	case "search":
+		log.Debug("Handling search request")
+		if err := input.ExecuteSearch(); err != nil {
+			log.Error("Search command failed", err)
+
+			resp = Response{
+				Status:  "error",
+				Message: err.Error(),
+			}
+		} else {
+			log.Info("Search command executed successfully")
+			resp = Response{
+				Status:  "success",
+				Message: "Item search opened",
+			}
+		}
 	default:
 		log.Error("Unknown command received", fmt.Errorf("command: %s", req.Command))
 		resp = Response{Status: "error", Message: "Unknown command"}
