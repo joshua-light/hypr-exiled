@@ -483,14 +483,19 @@ func (i *Input) classifyModifier(stat *ItemStat) {
 		// Mana on Kill (Suffix) - explicit.stat_1368271171
 		{regexp.MustCompile(`Gain (\d+) Mana per Enemy Killed`), "explicit.stat_1368271171", "suffix", "Mana on Kill"},
 		
-		// More patterns with actual stat IDs can be added as needed
-		// For now, focusing on the modifiers from your example
+		// Fire Damage (Prefix) - explicit.stat_3962278098
+		{regexp.MustCompile(`(\d+)% increased Fire Damage`), "explicit.stat_3962278098", "prefix", "Increased Fire Damage"},
+		
+		// Energy Shield (Prefix) - explicit.stat_4015621042
+		{regexp.MustCompile(`(\d+)% increased Energy Shield`), "explicit.stat_4015621042", "prefix", "Increased Energy Shield"},
+		
+		// Resistances (Suffix) - with specific stat IDs
+		{regexp.MustCompile(`\+(\d+)% to Fire Resistance`), "explicit.stat_3372524247", "suffix", "Fire Resistance"},
+		{regexp.MustCompile(`\+(\d+)% to Lightning Resistance`), "explicit.stat_1671376347", "suffix", "Lightning Resistance"},
+		{regexp.MustCompile(`\+(\d+)% to Cold Resistance`), "explicit.stat_4220027924", "suffix", "Cold Resistance"},
 		
 		// Life (Prefix) - Need to look up the actual ID
 		{regexp.MustCompile(`\+(\d+) to maximum Life`), "", "prefix", "Maximum Life"},
-		
-		// Resistances (Suffix) - Need to look up the actual IDs
-		{regexp.MustCompile(`\+(\d+)% to .* Resistance`), "", "suffix", "Resistance"},
 		
 		// Physical Damage (Prefix) - Need to look up the actual ID
 		{regexp.MustCompile(`Adds (\d+)(?:-(\d+))? Physical Damage`), "", "prefix", "Added Physical Damage"},
@@ -554,21 +559,21 @@ func (i *Input) classifyByConvention(stat *ItemStat) {
 		"intelligence", "strength", "dexterity", "per enemy killed", "on kill",
 	}
 	
-	// Check for prefix patterns
+	// Check for prefix patterns (classification only, no stat ID assignment)
 	for _, indicator := range prefixIndicators {
 		if strings.Contains(text, indicator) {
 			stat.ModifierType = "prefix"
-			stat.StatID = fmt.Sprintf("explicit.stat_%s", strings.ReplaceAll(indicator, " ", "_"))
+			stat.StatID = "" // Don't assign invalid stat IDs
 			i.log.Debug("Classified as prefix by convention", "text", stat.Text, "indicator", indicator)
 			return
 		}
 	}
 	
-	// Check for suffix patterns  
+	// Check for suffix patterns (classification only, no stat ID assignment)
 	for _, indicator := range suffixIndicators {
 		if strings.Contains(text, indicator) {
 			stat.ModifierType = "suffix" 
-			stat.StatID = fmt.Sprintf("explicit.stat_%s", strings.ReplaceAll(indicator, " ", "_"))
+			stat.StatID = "" // Don't assign invalid stat IDs
 			i.log.Debug("Classified as suffix by convention", "text", stat.Text, "indicator", indicator)
 			return
 		}
@@ -602,25 +607,31 @@ func (i *Input) buildStatFilters(stats []ItemStat) []StatFilter {
 			Disabled: false,
 		}
 		
-		// Add value constraints based on the stat values
+		// Add value constraints based on the stat values with ±10% range
 		if stat.Value > 0 {
 			filter.Value = &struct {
 				Min *int `json:"min,omitempty"`
 				Max *int `json:"max,omitempty"`
 			}{}
 			
-			// For exact values or small ranges, use tight constraints
-			if !stat.IsRange || (stat.Max - stat.Min) <= 2 {
-				// Use 80% of the stat value as minimum to find similar items
-				minValue := int(float64(stat.Value) * 0.8)
-				filter.Value.Min = &minValue
-				i.log.Debug("Added exact stat filter", "id", stat.StatID, "min", minValue, "text", stat.Text)
-			} else {
-				// For ranges, use the minimum value as the search constraint
-				minValue := stat.Min
-				filter.Value.Min = &minValue
-				i.log.Debug("Added range stat filter", "id", stat.StatID, "min", minValue, "text", stat.Text)
+			// Use ±10% range around the actual stat value for better matching
+			minValue := int(float64(stat.Value) * 0.9)
+			maxValue := int(float64(stat.Value) * 1.1)
+			
+			// Ensure minimum is at least 1 for positive stats
+			if minValue < 1 {
+				minValue = 1
 			}
+			
+			filter.Value.Min = &minValue
+			filter.Value.Max = &maxValue
+			
+			i.log.Debug("Added ranged stat filter", 
+				"id", stat.StatID, 
+				"min", minValue, 
+				"max", maxValue, 
+				"original", stat.Value,
+				"text", stat.Text)
 		}
 		
 		filters = append(filters, filter)
@@ -669,6 +680,7 @@ func (i *Input) mapItemClassToCategory(itemClass string) string {
 		"Currency":        "currency",
 		"Divination Cards": "card",
 		"Gems":            "gem",
+		"Foci":            "weapon.focus",
 	}
 	
 	if category, exists := categoryMap[itemClass]; exists {
