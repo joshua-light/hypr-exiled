@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 
 	"hypr-exiled/internal/app"
@@ -20,6 +21,9 @@ import (
 var embeddedAssets embed.FS
 
 func main() {
+	// Load environment variables from .env file if it exists
+	_ = godotenv.Load()
+	
 	configPath := flag.String("config", "", "path to config file")
 	debug := flag.Bool("debug", false, "enable debug logging")
 	showTrades := flag.Bool("showTrades", false, "show the trades UI")

@@ -1,12 +1,17 @@
 package input
 
 import (
+    "bytes"
     "encoding/json"
     "fmt"
+    "io"
     "math"
+    "net/http"
     "net/url"
+    "os"
     "os/exec"
     "regexp"
+    "sort"
     "strconv"
     "strings"
 	"time"
@@ -228,6 +233,11 @@ func (i *Input) ExecutePrice() (map[string]interface{}, error) {
 
 	i.log.Debug("Parsed item data for price check", "item", itemData)
 
+	// Generate and print the trade search URL for debugging (matches price check query)
+	tradeURL := i.buildPriceSearchURL(itemData)
+	i.log.Info("Price check search URL for debugging", "url", tradeURL)
+	fmt.Printf("\n🔗 Debug: Price check search URL (matches API query)\n%s\n\n", tradeURL)
+
 	// Get price data via API calls
 	priceData, err := i.fetchPriceData(itemData)
 	if err != nil {
@@ -312,9 +322,8 @@ type TradeAPIResponse struct {
 	Total int `json:"total"`
 }
 
-// fetchPriceData makes HTTP requests to PoE trade API to get pricing information
-func (i *Input) fetchPriceData(item *ItemData) (*PriceData, error) {
-	// Build the trade query (reusing existing logic)
+// buildPriceQuery creates a trade query specifically optimized for price checking
+func (i *Input) buildPriceQuery(item *ItemData) TradeQuery {
 	query := TradeQuery{}
 	query.Query.Status.Option = "securable"
 	query.Sort.Price = "asc"
@@ -359,6 +368,14 @@ func (i *Input) fetchPriceData(item *ItemData) (*PriceData, error) {
 		}
 		query.Query.Stats = append(query.Query.Stats, statGroup)
 	}
+	
+	return query
+}
+
+// fetchPriceData makes HTTP requests to PoE trade API to get pricing information
+func (i *Input) fetchPriceData(item *ItemData) (*PriceData, error) {
+	// Build the trade query for price checking (broader ranges)
+	query := i.buildPriceQuery(item)
 
 	// Serialize the query to JSON
 	queryJSON, err := json.Marshal(query)
@@ -367,26 +384,140 @@ func (i *Input) fetchPriceData(item *ItemData) (*PriceData, error) {
 	}
 
 	// Make the search request to PoE trade API
-	searchURL := fmt.Sprintf("https://www.pathofexile.com/api/trade2/search/poe2/%s", url.PathEscape(item.League))
+	baseURL := "https://www.pathofexile.com"
+	searchURL := baseURL + "/api/trade2/search/poe2/" + url.PathEscape(item.League)
 	
-	// TODO: This is a skeleton implementation - actual API calls would require:
-	// 1. Proper authentication/session handling
-	// 2. Rate limiting 
-	// 3. Proper request headers
-	// 4. Error handling for API responses
+	req, err := http.NewRequest("POST", searchURL, bytes.NewBuffer(queryJSON))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create search request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	
-	i.log.Info("Price check API call would be made", 
-		"url", searchURL,
-		"query_size", len(queryJSON),
-		"note", "Authentication and rate limiting needed")
-
-	// For now, return mock data to demonstrate the flow
+	// Load POESESSID from environment
+	poesessid := os.Getenv("POESESSID")
+	if poesessid == "" {
+		return nil, fmt.Errorf("POESESSID environment variable is not set")
+	}
+	req.Header.Set("Cookie", "POESESSID="+poesessid)
+	
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform search request: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read search response body: %w", err)
+	}
+	
+	var searchResp struct {
+		ID     string   `json:"id"`
+		Result []string `json:"result"`
+		Total  int      `json:"total"`
+	}
+	// Debug log the response body to understand what we're getting
+	i.log.Debug("Search API response body", "body", string(body), "status", resp.StatusCode)
+	
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
+	}
+	
+	if err := json.Unmarshal(body, &searchResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal search response: %w, body: %s", err, string(body))
+	}
+	
+	if searchResp.Total == 0 {
+		return &PriceData{
+			MinPrice:      0,
+			MaxPrice:      0,
+			AvgPrice:      0,
+			TotalListings: 0,
+			Currency:      "chaos",
+		}, nil
+	}
+	
+	// Fetch details for first 10 results
+	numFetch := 10
+	if len(searchResp.Result) < numFetch {
+		numFetch = len(searchResp.Result)
+	}
+	resultIDs := searchResp.Result[:numFetch]
+	fetchURL := baseURL + "/api/trade2/fetch/" + strings.Join(resultIDs, ",") + "?query=" + searchResp.ID
+	
+	fetchReq, err := http.NewRequest("GET", fetchURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create fetch request: %w", err)
+	}
+	fetchReq.Header.Set("Cookie", "POESESSID="+poesessid)
+	fetchReq.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	
+	fetchResp, err := client.Do(fetchReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform fetch request: %w", err)
+	}
+	defer fetchResp.Body.Close()
+	
+	fetchBody, err := io.ReadAll(fetchResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read fetch response body: %w", err)
+	}
+	
+	var tradeResp TradeAPIResponse
+	// Debug log the fetch response body
+	i.log.Debug("Fetch API response body", "body", string(fetchBody), "status", fetchResp.StatusCode)
+	
+	if fetchResp.StatusCode != 200 {
+		return nil, fmt.Errorf("Fetch API returned non-200 status: %d, body: %s", fetchResp.StatusCode, string(fetchBody))
+	}
+	
+	if err := json.Unmarshal(fetchBody, &tradeResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal fetch response: %w, body: %s", err, string(fetchBody))
+	}
+	
+	var prices []float64
+	var currency string
+	for _, r := range tradeResp.Result {
+		if r.Listing.Price.Amount > 0 {
+			prices = append(prices, r.Listing.Price.Amount)
+			if currency == "" {
+				currency = r.Listing.Price.Currency
+			}
+		}
+	}
+	
+	if len(prices) == 0 {
+		return &PriceData{
+			MinPrice:      0,
+			MaxPrice:      0,
+			AvgPrice:      0,
+			TotalListings: searchResp.Total,
+			Currency:      "chaos",
+		}, nil
+	}
+	
+	sort.Float64s(prices)
+	minPrice := prices[0]
+	maxPrice := prices[len(prices)-1]
+	sum := 0.0
+	for _, p := range prices {
+		sum += p
+	}
+	avgPrice := sum / float64(len(prices))
+	
+	if currency == "" {
+		currency = "chaos"
+	}
+	
 	return &PriceData{
-		MinPrice:      10.5,
-		MaxPrice:      45.8,
-		AvgPrice:      28.1,
-		TotalListings: 15,
-		Currency:      "chaos",
+		MinPrice:      minPrice,
+		MaxPrice:      maxPrice,
+		AvgPrice:      avgPrice,
+		TotalListings: searchResp.Total,
+		Currency:      currency,
 	}, nil
 }
 
@@ -412,23 +543,22 @@ func (i *Input) buildPriceStatFilters(stats []ItemStat, category string) []StatF
             }
         }
 		
-		// Use broader ranges for price checking (±20% instead of ±10%)
+		// Use only minimum values for price checking (no maximum constraint)
 		if stat.Value > 0 {
 			filter.Value = &struct {
 				Min *int `json:"min,omitempty"`
 				Max *int `json:"max,omitempty"`
 			}{}
 			
-			// Use ±20% range for broader price matching
-			minValue := int(float64(stat.Value) * 0.8)
-			maxValue := int(float64(stat.Value) * 1.2)
+			// Use 95% of the stat value as minimum (find items with at least this much)
+			minValue := int(float64(stat.Value) * 0.95)
 			
 			if minValue < 1 {
 				minValue = 1
 			}
 			
 			filter.Value.Min = &minValue
-			filter.Value.Max = &maxValue
+			// Don't set Max - we want items with this stat value OR HIGHER
 		}
 		
 		filters = append(filters, filter)
@@ -1109,6 +1239,26 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 	queryJSON, err := json.Marshal(query)
 	if err != nil {
 		i.log.Error("Failed to marshal trade query", err)
+        // Fallback to simple search
+        return i.buildSimpleTradeSearchURL(item.League, item.Name)
+    }
+
+	// Construct the final URL
+    baseURL := fmt.Sprintf("https://www.pathofexile.com/trade2/search/poe2/%s", url.PathEscape(item.League))
+	encodedQuery := url.QueryEscape(string(queryJSON))
+	
+	return fmt.Sprintf("%s?q=%s", baseURL, encodedQuery)
+}
+
+// buildPriceSearchURL constructs a PoE 2 trade site URL using the same query as price checking
+func (i *Input) buildPriceSearchURL(item *ItemData) string {
+	// Use the same query structure as price checking for exact debugging match
+	query := i.buildPriceQuery(item)
+
+	// Serialize the query to JSON
+	queryJSON, err := json.Marshal(query)
+	if err != nil {
+		i.log.Error("Failed to marshal price query for URL", err)
         // Fallback to simple search
         return i.buildSimpleTradeSearchURL(item.League, item.Name)
     }
