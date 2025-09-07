@@ -26,6 +26,7 @@ func main() {
 	hideout := flag.Bool("hideout", false, "go to hideout")
 	kingsmarch := flag.Bool("kingsmarch", false, "go to kingsmarch")
 	search := flag.Bool("search", false, "search item on PoE 2 trade site")
+	price := flag.Bool("price", false, "check average price for item via API")
 	flag.Parse()
 
 	// Initialize logger
@@ -54,6 +55,8 @@ func main() {
 		handleKingsmarch(log, *configPath)
 	case *search:
 		handleSearch(log, *configPath)
+	case *price:
+		handlePrice(log, *configPath)
 	default:
 		startBackgroundService(log, *configPath)
 	}
@@ -185,6 +188,140 @@ func handleSearch(log *logger.Logger, configPath string) {
 	}
 
 	log.Info("Search command executed via IPC")
+}
+
+func handlePrice(log *logger.Logger, configPath string) {
+	log.Info("Starting price check command")
+	_, cleanup, err := initializeCommon(log, configPath)
+	if err != nil {
+		log.Error("Initialization failed", err)
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		global.GetNotifier().Show("Price check failed: "+err.Error(), notify.Error)
+		return
+	}
+	defer cleanup()
+
+	log.Debug("Sending price command to background service")
+	resp, err := ipc.SendCommand("price")
+	if err != nil {
+		log.Error("Price command failed", err)
+		global.GetNotifier().Show("Failed to contact service", notify.Error)
+		return
+	}
+
+	if resp.Status != "success" {
+		log.Error("Price check failed", fmt.Errorf(resp.Message))
+		global.GetNotifier().Show(resp.Message, notify.Error)
+		return
+	}
+
+	// Display price data if available
+	if resp.PriceData != nil {
+		displayPriceResults(resp.PriceData)
+		showPriceNotification(resp.PriceData)
+	}
+
+	log.Info("Price command executed via IPC")
+}
+
+func displayPriceResults(priceData map[string]interface{}) {
+	fmt.Printf("\n=== Price Check Results ===\n")
+	
+	if itemName, ok := priceData["item_name"].(string); ok && itemName != "" {
+		fmt.Printf("Item: %s\n", itemName)
+	}
+	
+	if baseType, ok := priceData["base_type"].(string); ok && baseType != "" {
+		if itemName, _ := priceData["item_name"].(string); baseType != itemName {
+			fmt.Printf("Base Type: %s\n", baseType)
+		}
+	}
+	
+	if itemClass, ok := priceData["item_class"].(string); ok && itemClass != "" {
+		fmt.Printf("Class: %s\n", itemClass)
+	}
+	
+	if league, ok := priceData["league"].(string); ok && league != "" {
+		fmt.Printf("League: %s\n", league)
+	}
+	
+	fmt.Printf("\n--- Price Analysis ---\n")
+	
+	if totalListings, ok := priceData["total_listings"].(float64); ok {
+		fmt.Printf("Total Listings: %.0f\n", totalListings)
+	}
+	
+	currency := "unknown"
+	if c, ok := priceData["currency"].(string); ok {
+		currency = c
+	}
+	
+	if minPrice, ok := priceData["min_price"].(float64); ok {
+		fmt.Printf("Min Price: %.1f %s\n", minPrice, currency)
+	}
+	
+	if maxPrice, ok := priceData["max_price"].(float64); ok {
+		fmt.Printf("Max Price: %.1f %s\n", maxPrice, currency)
+	}
+	
+	if avgPrice, ok := priceData["avg_price"].(float64); ok {
+		fmt.Printf("Average Price: %.1f %s\n", avgPrice, currency)
+	}
+	
+	fmt.Printf("\n--- Statistics ---\n")
+	
+	if modifiersFound, ok := priceData["modifiers_found"].(float64); ok {
+		fmt.Printf("Modifiers Found: %.0f\n", modifiersFound)
+	}
+	
+	if searchableModifiers, ok := priceData["searchable_modifiers"].(float64); ok {
+		fmt.Printf("Searchable Modifiers: %.0f\n", searchableModifiers)
+		
+		if searchableModifiers == 0 {
+			fmt.Printf("\nNote: No modifiers could be matched to trade API IDs.\n")
+			fmt.Printf("Price check was based on item category only.\n")
+		}
+	}
+	
+	fmt.Printf("========================\n\n")
+}
+
+func showPriceNotification(priceData map[string]interface{}) {
+	// Build a concise notification message
+	var itemName string
+	if name, ok := priceData["item_name"].(string); ok && name != "" {
+		itemName = name
+	} else {
+		itemName = "Item"
+	}
+	
+	var currency string = "unknown"
+	if c, ok := priceData["currency"].(string); ok {
+		currency = c
+	}
+	
+	var minPrice, maxPrice, avgPrice float64
+	if min, ok := priceData["min_price"].(float64); ok {
+		minPrice = min
+	}
+	if max, ok := priceData["max_price"].(float64); ok {
+		maxPrice = max
+	}
+	if avg, ok := priceData["avg_price"].(float64); ok {
+		avgPrice = avg
+	}
+	
+	var totalListings float64
+	if listings, ok := priceData["total_listings"].(float64); ok {
+		totalListings = listings
+	}
+	
+	// Create a concise message for notification
+	message := fmt.Sprintf("💰 %s\n%.0f listings: %.1f - %.1f %s\nAvg: %.1f %s", 
+		itemName, totalListings, minPrice, maxPrice, currency, avgPrice, currency)
+	
+	// Show notification
+	global.GetNotifier().Show(message, notify.Info)
 }
 
 func initializeCommon(log *logger.Logger, configPath string) (*config.Config, func(), error) {

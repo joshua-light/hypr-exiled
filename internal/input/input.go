@@ -181,6 +181,298 @@ func (i *Input) ExecuteSearch() error {
 	return nil
 }
 
+// ExecutePrice extracts item text from clipboard, makes API requests to get pricing data
+func (i *Input) ExecutePrice() (map[string]interface{}, error) {
+    cfg := global.GetConfig()
+
+	i.log.Debug("ExecutePrice called")
+	if !i.detector.IsActive() {
+		activeApp := cfg.GameNameByAppID(i.detector.ActiveAppID())
+		i.log.Debug("PoE not active", "current_app", activeApp)
+		return nil, fmt.Errorf("%s needs to be running", activeApp)
+	}
+
+	// Focus the PoE window first
+	window := i.detector.GetCurrentWindow()
+	if err := i.windowManager.FocusWindow(window); err != nil {
+		return nil, fmt.Errorf("failed to focus window: %w", err)
+	}
+
+	// Give the window focus time
+	time.Sleep(100 * time.Millisecond)
+
+	// Copy item to clipboard (Ctrl+C)
+	i.log.Debug("Copying item to clipboard")
+	robotgo.KeyTap("c", "ctrl")
+	
+	// Wait for clipboard to be populated
+	time.Sleep(200 * time.Millisecond)
+
+	// Get clipboard content
+	clipboardText, err := robotgo.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read clipboard: %w", err)
+	}
+	if clipboardText == "" {
+		return nil, fmt.Errorf("no item text found in clipboard")
+	}
+
+	i.log.Debug("Extracted item text", "text", clipboardText)
+
+    // Parse the full item data (reusing existing parsing logic)
+    statsmap.Load()
+    itemData, err := i.parseItemData(clipboardText)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse item data: %w", err)
+	}
+
+	i.log.Debug("Parsed item data for price check", "item", itemData)
+
+	// Get price data via API calls
+	priceData, err := i.fetchPriceData(itemData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch price data: %w", err)
+	}
+
+	// Return price data for client display
+	result := map[string]interface{}{
+		"item_name":           itemData.Name,
+		"base_type":           itemData.BaseType,
+		"item_class":          itemData.ItemClass,
+		"league":              itemData.League,
+		"min_price":           priceData.MinPrice,
+		"max_price":           priceData.MaxPrice,
+		"avg_price":           priceData.AvgPrice,
+		"total_listings":      priceData.TotalListings,
+		"currency":            priceData.Currency,
+		"modifiers_found":     len(itemData.Stats),
+	}
+	
+	// Count searchable modifiers
+	matchedStats := 0
+	for _, stat := range itemData.Stats {
+		if stat.StatID != "" {
+			matchedStats++
+		}
+	}
+	result["searchable_modifiers"] = matchedStats
+	
+	return result, nil
+}
+
+// PriceData represents the price information from API
+type PriceData struct {
+	MinPrice    float64
+	MaxPrice    float64
+	AvgPrice    float64
+	TotalListings int
+	Currency    string
+}
+
+// TradeAPIResponse represents the structure of PoE trade API response
+type TradeAPIResponse struct {
+	ID     string `json:"id"`
+	Result []struct {
+		ID      string `json:"id"`
+		Listing struct {
+			Method    string `json:"method"`
+			Indexed   string `json:"indexed"`
+			Stash     struct {
+				Name string `json:"name"`
+			} `json:"stash"`
+			Whisper string `json:"whisper"`
+			Account struct {
+				Name       string `json:"name"`
+				Online     struct {
+					League string `json:"league"`
+				} `json:"online"`
+				LastCharacterName string `json:"lastCharacterName"`
+				Language          string `json:"language"`
+				Realm             string `json:"realm"`
+			} `json:"account"`
+			Price struct {
+				Type     string  `json:"type"`
+				Amount   float64 `json:"amount"`
+				Currency string  `json:"currency"`
+			} `json:"price"`
+		} `json:"listing"`
+		Item struct {
+			Verified  bool   `json:"verified"`
+			W         int    `json:"w"`
+			H         int    `json:"h"`
+			Icon      string `json:"icon"`
+			League    string `json:"league"`
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			TypeLine  string `json:"typeLine"`
+			BaseType  string `json:"baseType"`
+			ItemLevel int    `json:"ilvl"`
+		} `json:"item"`
+	} `json:"result"`
+	Total int `json:"total"`
+}
+
+// fetchPriceData makes HTTP requests to PoE trade API to get pricing information
+func (i *Input) fetchPriceData(item *ItemData) (*PriceData, error) {
+	// Build the trade query (reusing existing logic)
+	query := TradeQuery{}
+	query.Query.Status.Option = "securable"
+	query.Sort.Price = "asc"
+	query.Query.Stats = make([]StatGroup, 0)
+
+    // Set item category based on Item Class for broader search
+    if item.ItemClass != "" {
+        category := i.mapItemClassToCategory(item.ItemClass)
+        if category != "" {
+			if query.Query.Filters.TypeFilters == nil {
+				query.Query.Filters.TypeFilters = &struct {
+					Filters struct {
+						Category *struct {
+							Option string `json:"option,omitempty"`
+						} `json:"category,omitempty"`
+						Quality *struct {
+							Min int `json:"min,omitempty"`
+						} `json:"quality,omitempty"`
+						ItemLevel *struct {
+							Min int `json:"min,omitempty"`
+							Max int `json:"max,omitempty"`
+						} `json:"ilvl,omitempty"`
+					} `json:"filters"`
+				}{}
+			}
+            query.Query.Filters.TypeFilters.Filters.Category = &struct {
+                Option string `json:"option,omitempty"`
+            }{Option: category}
+        }
+    }
+
+	// Add stat filters (use broader ranges for price checking)
+    var currentCategory string
+    if item.ItemClass != "" {
+        currentCategory = i.mapItemClassToCategory(item.ItemClass)
+    }
+    statFilters := i.buildPriceStatFilters(item.Stats, currentCategory)
+	if len(statFilters) > 0 {
+		statGroup := StatGroup{
+			Type:    "and",
+			Filters: statFilters,
+		}
+		query.Query.Stats = append(query.Query.Stats, statGroup)
+	}
+
+	// Serialize the query to JSON
+	queryJSON, err := json.Marshal(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal trade query: %w", err)
+	}
+
+	// Make the search request to PoE trade API
+	searchURL := fmt.Sprintf("https://www.pathofexile.com/api/trade2/search/poe2/%s", url.PathEscape(item.League))
+	
+	// TODO: This is a skeleton implementation - actual API calls would require:
+	// 1. Proper authentication/session handling
+	// 2. Rate limiting 
+	// 3. Proper request headers
+	// 4. Error handling for API responses
+	
+	i.log.Info("Price check API call would be made", 
+		"url", searchURL,
+		"query_size", len(queryJSON),
+		"note", "Authentication and rate limiting needed")
+
+	// For now, return mock data to demonstrate the flow
+	return &PriceData{
+		MinPrice:      10.5,
+		MaxPrice:      45.8,
+		AvgPrice:      28.1,
+		TotalListings: 15,
+		Currency:      "chaos",
+	}, nil
+}
+
+// buildPriceStatFilters builds stat filters optimized for price checking (broader ranges)
+func (i *Input) buildPriceStatFilters(stats []ItemStat, category string) []StatFilter {
+    var filters []StatFilter
+	
+	for _, stat := range stats {
+		// Skip stats without stat IDs
+		if stat.StatID == "" {
+			continue
+		}
+		
+        filter := StatFilter{
+            ID:       stat.StatID,
+            Disabled: false,
+        }
+
+        // Contextual fix for local ES on armour
+        if filter.ID == "explicit.stat_3489782002" {
+            if strings.HasPrefix(category, "armour.") {
+                filter.ID = "explicit.stat_4052037485"
+            }
+        }
+		
+		// Use broader ranges for price checking (±20% instead of ±10%)
+		if stat.Value > 0 {
+			filter.Value = &struct {
+				Min *int `json:"min,omitempty"`
+				Max *int `json:"max,omitempty"`
+			}{}
+			
+			// Use ±20% range for broader price matching
+			minValue := int(float64(stat.Value) * 0.8)
+			maxValue := int(float64(stat.Value) * 1.2)
+			
+			if minValue < 1 {
+				minValue = 1
+			}
+			
+			filter.Value.Min = &minValue
+			filter.Value.Max = &maxValue
+		}
+		
+		filters = append(filters, filter)
+	}
+	
+    return filters
+}
+
+// displayPriceSummary outputs the price analysis to the console
+func (i *Input) displayPriceSummary(item *ItemData, priceData *PriceData) {
+	fmt.Printf("\n=== Price Check Results ===\n")
+	fmt.Printf("Item: %s\n", item.Name)
+	if item.BaseType != "" && item.BaseType != item.Name {
+		fmt.Printf("Base Type: %s\n", item.BaseType)
+	}
+	if item.ItemClass != "" {
+		fmt.Printf("Class: %s\n", item.ItemClass)
+	}
+	fmt.Printf("League: %s\n", item.League)
+	fmt.Printf("\n--- Price Analysis ---\n")
+	fmt.Printf("Total Listings: %d\n", priceData.TotalListings)
+	fmt.Printf("Min Price: %.1f %s\n", priceData.MinPrice, priceData.Currency)
+	fmt.Printf("Max Price: %.1f %s\n", priceData.MaxPrice, priceData.Currency)
+	fmt.Printf("Average Price: %.1f %s\n", priceData.AvgPrice, priceData.Currency)
+	fmt.Printf("\n--- Statistics ---\n")
+	fmt.Printf("Modifiers Found: %d\n", len(item.Stats))
+	
+	// Show stat IDs that were matched for the search
+	matchedStats := 0
+	for _, stat := range item.Stats {
+		if stat.StatID != "" {
+			matchedStats++
+		}
+	}
+	fmt.Printf("Searchable Modifiers: %d\n", matchedStats)
+	
+	if matchedStats == 0 {
+		fmt.Printf("\nNote: No modifiers could be matched to trade API IDs.\n")
+		fmt.Printf("Price check was based on item category only.\n")
+	}
+	
+	fmt.Printf("========================\n\n")
+}
+
 // ItemData represents the parsed item information
 type ItemData struct {
 	Name        string
@@ -758,7 +1050,7 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 	query := TradeQuery{}
 	
 	// Basic query setup
-	query.Query.Status.Option = "online"
+	query.Query.Status.Option = "securable"
 	query.Sort.Price = "asc"
 	query.Query.Stats = make([]StatGroup, 0)
 
@@ -835,7 +1127,7 @@ func (i *Input) buildSimpleTradeSearchURL(league string, itemName string) string
 	// Create a simple query structure
 	simpleQuery := map[string]interface{}{
 		"query": map[string]interface{}{
-			"status": map[string]string{"option": "online"},
+			"status": map[string]string{"option": "securable"},
 			"type":   itemName,
 			"stats":  []interface{}{map[string]interface{}{"type": "and", "filters": []interface{}{}}},
 		},

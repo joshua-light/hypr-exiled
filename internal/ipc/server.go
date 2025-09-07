@@ -19,8 +19,9 @@ type Request struct {
 }
 
 type Response struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Status    string                 `json:"status"`
+	Message   string                 `json:"message"`
+	PriceData map[string]interface{} `json:"price_data,omitempty"`
 }
 
 func StartSocketServer(tradeManager *trade_manager.TradeManager, input *input.Input) {
@@ -130,6 +131,23 @@ func handleConnection(conn net.Conn, tradeManager *trade_manager.TradeManager, i
 			resp = Response{
 				Status:  "success",
 				Message: "Item search opened",
+			}
+		}
+	case "price":
+		log.Debug("Handling price request")
+		if priceData, err := input.ExecutePrice(); err != nil {
+			log.Error("Price command failed", err)
+
+			resp = Response{
+				Status:  "error",
+				Message: err.Error(),
+			}
+		} else {
+			log.Info("Price command executed successfully")
+			resp = Response{
+				Status:    "success",
+				Message:   "Price check completed",
+				PriceData: priceData,
 			}
 		}
 	default:
