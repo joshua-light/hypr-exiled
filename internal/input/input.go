@@ -368,6 +368,50 @@ func (i *Input) buildPriceQuery(item *ItemData) TradeQuery {
 		}
 		query.Query.Stats = append(query.Query.Stats, statGroup)
 	}
+
+	// Add equipment filters for armor, evasion, and energy shield (same as search functionality)
+	if item.Armour != nil || item.Evasion != nil || item.EnergyShield != nil {
+		if query.Query.Filters.EquipmentFilters == nil {
+			query.Query.Filters.EquipmentFilters = &struct {
+				Filters struct {
+					AR *struct {
+						Min *int `json:"min,omitempty"`
+					} `json:"ar,omitempty"`
+					EV *struct {
+						Min *int `json:"min,omitempty"`
+					} `json:"ev,omitempty"`
+					ES *struct {
+						Min *int `json:"min,omitempty"`
+					} `json:"es,omitempty"`
+				} `json:"filters"`
+				Disabled bool `json:"disabled,omitempty"`
+			}{}
+		}
+		
+		if item.Armour != nil {
+			// Use broader range for price checking (20% below actual value)
+			minArmour := int(float64(*item.Armour) * 0.8)
+			query.Query.Filters.EquipmentFilters.Filters.AR = &struct {
+				Min *int `json:"min,omitempty"`
+			}{Min: &minArmour}
+		}
+		
+		if item.Evasion != nil {
+			// Use broader range for price checking (20% below actual value)
+			minEvasion := int(float64(*item.Evasion) * 0.8)
+			query.Query.Filters.EquipmentFilters.Filters.EV = &struct {
+				Min *int `json:"min,omitempty"`
+			}{Min: &minEvasion}
+		}
+		
+		if item.EnergyShield != nil {
+			// Use broader range for price checking (20% below actual value)
+			minEnergyShield := int(float64(*item.EnergyShield) * 0.8)
+			query.Query.Filters.EquipmentFilters.Filters.ES = &struct {
+				Min *int `json:"min,omitempty"`
+			}{Min: &minEnergyShield}
+		}
+	}
 	
 	return query
 }
@@ -643,6 +687,10 @@ type ItemData struct {
 	Requirements map[string]int
 	Stats       []ItemStat
 	League      string
+	// Equipment defense values
+	Armour       *int // AR value
+	Evasion      *int // EV value
+	EnergyShield *int // ES value
 }
 
 // ItemStat represents a modifier/stat on an item
@@ -701,6 +749,20 @@ type TradeQuery struct {
 					} `json:"corrupted,omitempty"`
 				} `json:"filters"`
 			} `json:"misc_filters,omitempty"`
+			EquipmentFilters *struct {
+				Filters struct {
+					AR *struct {
+						Min *int `json:"min,omitempty"`
+					} `json:"ar,omitempty"`
+					EV *struct {
+						Min *int `json:"min,omitempty"`
+					} `json:"ev,omitempty"`
+					ES *struct {
+						Min *int `json:"min,omitempty"`
+					} `json:"es,omitempty"`
+				} `json:"filters"`
+				Disabled bool `json:"disabled,omitempty"`
+			} `json:"equipment_filters,omitempty"`
 		} `json:"filters"`
 	} `json:"query"`
 	Sort struct {
@@ -801,6 +863,27 @@ func (i *Input) parseItemData(clipboardText string) (*ItemData, error) {
 			// Count socket characters (simple implementation)
 			sockets := strings.Count(line, "R") + strings.Count(line, "G") + strings.Count(line, "B") + strings.Count(line, "W")
 			item.Sockets = sockets
+		} else if strings.Contains(line, "Armour:") {
+			// Parse armor value: "Armour: 445"
+			if match := regexp.MustCompile(`Armour: (\d+)`).FindStringSubmatch(line); match != nil {
+				if value, err := strconv.Atoi(match[1]); err == nil {
+					item.Armour = &value
+				}
+			}
+		} else if strings.Contains(line, "Evasion Rating:") {
+			// Parse evasion value: "Evasion Rating: 234" 
+			if match := regexp.MustCompile(`Evasion Rating: (\d+)`).FindStringSubmatch(line); match != nil {
+				if value, err := strconv.Atoi(match[1]); err == nil {
+					item.Evasion = &value
+				}
+			}
+		} else if strings.Contains(line, "Energy Shield:") {
+			// Parse energy shield value: "Energy Shield: 156"
+			if match := regexp.MustCompile(`Energy Shield: (\d+)`).FindStringSubmatch(line); match != nil {
+				if value, err := strconv.Atoi(match[1]); err == nil {
+					item.EnergyShield = &value
+				}
+			}
 		} else if strings.HasPrefix(line, "Requirements:") {
 			inSection = "requirements"
 		} else if strings.HasPrefix(line, "Requires:") {
@@ -1279,6 +1362,55 @@ func (i *Input) buildAdvancedTradeSearchURL(item *ItemData) string {
 		i.log.Info("Using basic search", 
 			"parsed_stats", len(item.Stats),
 			"reason", "No modifiers matched known stat IDs")
+	}
+
+	// Add equipment filters for armor, evasion, and energy shield
+	if item.Armour != nil || item.Evasion != nil || item.EnergyShield != nil {
+		if query.Query.Filters.EquipmentFilters == nil {
+			query.Query.Filters.EquipmentFilters = &struct {
+				Filters struct {
+					AR *struct {
+						Min *int `json:"min,omitempty"`
+					} `json:"ar,omitempty"`
+					EV *struct {
+						Min *int `json:"min,omitempty"`
+					} `json:"ev,omitempty"`
+					ES *struct {
+						Min *int `json:"min,omitempty"`
+					} `json:"es,omitempty"`
+				} `json:"filters"`
+				Disabled bool `json:"disabled,omitempty"`
+			}{}
+		}
+		
+		if item.Armour != nil {
+			// Set minimum armor to 10% below the actual value to allow for some flexibility
+			minArmour := int(float64(*item.Armour) * 0.9)
+			query.Query.Filters.EquipmentFilters.Filters.AR = &struct {
+				Min *int `json:"min,omitempty"`
+			}{Min: &minArmour}
+			i.log.Debug("Added armor filter", "original", *item.Armour, "min", minArmour)
+		}
+		
+		if item.Evasion != nil {
+			// Set minimum evasion to 10% below the actual value
+			minEvasion := int(float64(*item.Evasion) * 0.9)
+			query.Query.Filters.EquipmentFilters.Filters.EV = &struct {
+				Min *int `json:"min,omitempty"`
+			}{Min: &minEvasion}
+			i.log.Debug("Added evasion filter", "original", *item.Evasion, "min", minEvasion)
+		}
+		
+		if item.EnergyShield != nil {
+			// Set minimum energy shield to 10% below the actual value
+			minEnergyShield := int(float64(*item.EnergyShield) * 0.9)
+			query.Query.Filters.EquipmentFilters.Filters.ES = &struct {
+				Min *int `json:"min,omitempty"`
+			}{Min: &minEnergyShield}
+			i.log.Debug("Added energy shield filter", "original", *item.EnergyShield, "min", minEnergyShield)
+		}
+		
+		i.log.Info("Added equipment filters to search")
 	}
 
 	// Serialize the query to JSON
