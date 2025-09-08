@@ -542,23 +542,49 @@ func (i *Input) buildPriceStatFilters(stats []ItemStat, category string) []StatF
                 filter.ID = "explicit.stat_4052037485"
             }
         }
+
+        // Contextual fix for armor stats: use global on jewelry/belts, local on armor pieces
+        if filter.ID == "explicit.stat_3484657501" { // "# to Armour" (local version)
+            if strings.HasPrefix(category, "accessory.") {
+                // Use global armor stat for belts, rings, amulets
+                filter.ID = "explicit.stat_809229260"
+            }
+            // Keep local version for armor pieces (armour.* categories)
+        }
+
+        // Contextual fix for evasion rating stats: use global on jewelry/belts, local on armor pieces
+        if filter.ID == "explicit.stat_2144192055" { // "# to Evasion Rating" (local version)
+            if strings.HasPrefix(category, "accessory.") {
+                // Use global evasion rating stat for belts, rings, amulets
+                filter.ID = "explicit.stat_53045048"
+            }
+            // Keep local version for armor pieces (armour.* categories)
+        }
 		
-		// Use only minimum values for price checking (no maximum constraint)
+		// Set both minimum and maximum values for price checking
 		if stat.Value > 0 {
 			filter.Value = &struct {
 				Min *int `json:"min,omitempty"`
 				Max *int `json:"max,omitempty"`
 			}{}
 			
-			// Use 95% of the stat value as minimum (find items with at least this much)
-			minValue := int(float64(stat.Value) * 0.95)
+			// Use 105% of the stat value as maximum (find items with at most this much)
+			maxValue := int(float64(stat.Value) * 1.05)
+			filter.Value.Max = &maxValue
 			
-			if minValue < 1 {
-				minValue = 1
+			// Set minimum value slightly lower than actual, but only for stats >= 10
+			if stat.Value >= 10 {
+				// Use 90% of the stat value as minimum (find items with at least this much)
+				minValue := int(float64(stat.Value) * 0.9)
+				if minValue < 1 {
+					minValue = 1
+				}
+				filter.Value.Min = &minValue
+			} else {
+				// For stats < 10, use the same value as minimum (exact match)
+				minValue := stat.Value
+				filter.Value.Min = &minValue
 			}
-			
-			filter.Value.Min = &minValue
-			// Don't set Max - we want items with this stat value OR HIGHER
 		}
 		
 		filters = append(filters, filter)
@@ -1089,6 +1115,26 @@ func (i *Input) buildStatFilters(stats []ItemStat, category string) []StatFilter
                 i.log.Debug("Adjusted stat to local ES for armour", "from", "explicit.stat_3489782002", "to", filter.ID, "text", stat.Text)
             }
         }
+
+        // Contextual fix for armor stats: use global on jewelry/belts, local on armor pieces
+        if filter.ID == "explicit.stat_3484657501" { // "# to Armour" (local version)
+            if strings.HasPrefix(category, "accessory.") {
+                // Use global armor stat for belts, rings, amulets
+                filter.ID = "explicit.stat_809229260"
+                i.log.Debug("Adjusted stat to global armor for accessory", "from", "explicit.stat_3484657501", "to", filter.ID, "text", stat.Text)
+            }
+            // Keep local version for armor pieces (armour.* categories)
+        }
+
+        // Contextual fix for evasion rating stats: use global on jewelry/belts, local on armor pieces
+        if filter.ID == "explicit.stat_2144192055" { // "# to Evasion Rating" (local version)
+            if strings.HasPrefix(category, "accessory.") {
+                // Use global evasion rating stat for belts, rings, amulets
+                filter.ID = "explicit.stat_53045048"
+                i.log.Debug("Adjusted stat to global evasion rating for accessory", "from", "explicit.stat_2144192055", "to", filter.ID, "text", stat.Text)
+            }
+            // Keep local version for armor pieces (armour.* categories)
+        }
 		
 		// Add value constraints based on the stat values with ±10% range
 		if stat.Value > 0 {
@@ -1163,7 +1209,7 @@ func (i *Input) mapItemClassToCategory(itemClass string) string {
 		"Currency":        "currency",
 		"Divination Cards": "card",
 		"Gems":            "gem",
-		"Foci":            "weapon.focus",
+		"Foci":            "armour.focus",
 	}
 	
 	if category, exists := categoryMap[itemClass]; exists {
