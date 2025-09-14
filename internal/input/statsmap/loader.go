@@ -134,6 +134,12 @@ func Load() {
                         id = arr[1]
                     }
                 }
+                // Special-case: "# to Evasion Rating" should prefer the local explicit id when available
+                if key == "# to Evasion Rating" {
+                    if arr, exists := node.Trade.IDs["explicit"]; exists && len(arr) > 0 {
+                        id = arr[0] // Use first ID which is the local version
+                    }
+                }
                 if _, exists := matcherToID[key]; !exists {
                     matcherToID[key] = id
                 }
@@ -149,6 +155,15 @@ func FindID(normalizedMatcher string) (string, bool) {
     if matcherToID == nil {
         return "", false
     }
-    id, ok := matcherToID[normalizedMatcher]
-    return id, ok
+    if id, ok := matcherToID[normalizedMatcher]; ok {
+        return id, true
+    }
+    // Fallback: try without a leading '+' which may appear in tooltip text
+    if strings.HasPrefix(normalizedMatcher, "+") {
+        alt := strings.TrimPrefix(normalizedMatcher, "+")
+        if id, ok := matcherToID[alt]; ok {
+            return id, true
+        }
+    }
+    return "", false
 }

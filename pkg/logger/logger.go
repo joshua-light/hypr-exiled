@@ -29,14 +29,25 @@ type Option func(*Logger) error
 
 // WithConsole enables console logging
 func WithConsole() Option {
-	return func(l *Logger) error {
-		consoleWriter := zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			TimeFormat: time.RFC3339,
-		}
-		l.zlog = l.zlog.Output(consoleWriter)
-		return nil
-	}
+    return func(l *Logger) error {
+        consoleWriter := zerolog.ConsoleWriter{
+            Out:        os.Stdout,
+            TimeFormat: time.RFC3339,
+        }
+        // If a file is already configured, tee logs to both console and file.
+        if l.file != nil {
+            fileWriter := zerolog.ConsoleWriter{
+                Out:        l.file,
+                TimeFormat: time.RFC3339,
+                NoColor:    true,
+            }
+            mw := zerolog.MultiLevelWriter(consoleWriter, fileWriter)
+            l.zlog = l.zlog.Output(mw)
+        } else {
+            l.zlog = l.zlog.Output(consoleWriter)
+        }
+        return nil
+    }
 }
 
 // WithLevel sets the logging level

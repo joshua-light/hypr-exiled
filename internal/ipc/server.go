@@ -19,9 +19,10 @@ type Request struct {
 }
 
 type Response struct {
-	Status    string                 `json:"status"`
-	Message   string                 `json:"message"`
-	PriceData map[string]interface{} `json:"price_data,omitempty"`
+    Status    string                 `json:"status"`
+    Message   string                 `json:"message"`
+    PriceData map[string]interface{} `json:"price_data,omitempty"`
+    ResearchData map[string]interface{} `json:"research_data,omitempty"`
 }
 
 func StartSocketServer(tradeManager *trade_manager.TradeManager, input *input.Input) {
@@ -148,6 +149,65 @@ func handleConnection(conn net.Conn, tradeManager *trade_manager.TradeManager, i
 				Status:    "success",
 				Message:   "Price check completed",
 				PriceData: priceData,
+			}
+		}
+	case "research":
+		log.Debug("Handling research request")
+		if researchData, err := input.ExecuteResearch(); err != nil {
+			log.Error("Research command failed", err)
+
+			resp = Response{
+				Status:  "error",
+				Message: err.Error(),
+			}
+		} else {
+			// Log a concise summary in the server process as well
+			league, _ := researchData["league"].(string)
+			itemClass, _ := researchData["item_class"].(string)
+			category, _ := researchData["category"].(string)
+			total, _ := researchData["total_listings"].(int)
+			consideredFloat, _ := researchData["considered_listings"].(int)
+			if consideredFloat == 0 {
+				if v, ok := researchData["considered_listings"].(float64); ok { consideredFloat = int(v) }
+			}
+			log.Info("Research command executed successfully",
+				"league", league,
+				"item_class", itemClass,
+				"category", category,
+				"total", total,
+				"considered", consideredFloat,
+			)
+			// Also log the top stats (up to 10) if present
+			if raw, ok := researchData["stats"].([]map[string]interface{}); ok {
+				limit := 10
+				for idx := 0; idx < len(raw) && idx < limit; idx++ {
+					s := raw[idx]
+					log.Info("Top research stat",
+						"rank", idx+1,
+						"id", s["id"],
+						"text", s["text"],
+						"weighted_score", s["weighted_score"],
+						"coverage_pct", s["coverage_pct"],
+					)
+				}
+			} else if arr, ok := researchData["stats"].([]interface{}); ok {
+				limit := 10
+				for idx := 0; idx < len(arr) && idx < limit; idx++ {
+					if s, ok := arr[idx].(map[string]interface{}); ok {
+						log.Info("Top research stat",
+							"rank", idx+1,
+							"id", s["id"],
+							"text", s["text"],
+							"weighted_score", s["weighted_score"],
+							"coverage_pct", s["coverage_pct"],
+						)
+					}
+				}
+			}
+			resp = Response{
+				Status:       "success",
+				Message:      "Research completed",
+				ResearchData: researchData,
 			}
 		}
 	default:

@@ -604,6 +604,15 @@ func (i *Input) buildPriceStatFilters(stats []ItemStat, category string) []StatF
             }
             // Keep local version for armor pieces (armour.* categories)
         }
+
+        // Contextual fix for accuracy rating stats: use global for bows, local for other weapons
+        if filter.ID == "explicit.stat_691932474" { // "# to Accuracy Rating" (local version)
+            if strings.HasPrefix(category, "weapon.bow") {
+                // Use global accuracy rating stat for bows
+                filter.ID = "explicit.stat_803737631"
+            }
+            // Keep local version for other weapon types
+        }
 		
 		// Set both minimum and maximum values for price checking
 		if stat.Value > 0 {
@@ -722,52 +731,542 @@ type StatGroup struct {
 
 // TradeQuery represents the JSON structure for PoE 2 trade API
 type TradeQuery struct {
-	Query struct {
-		Status struct {
-			Option string `json:"option"`
-		} `json:"status"`
-		Stats   []StatGroup `json:"stats"`
-		Filters struct {
-			TypeFilters *struct {
-				Filters struct {
-					Category *struct {
-						Option string `json:"option,omitempty"`
-					} `json:"category,omitempty"`
-					Quality *struct {
-						Min int `json:"min,omitempty"`
-					} `json:"quality,omitempty"`
-					ItemLevel *struct {
-						Min int `json:"min,omitempty"`
-						Max int `json:"max,omitempty"`
-					} `json:"ilvl,omitempty"`
-				} `json:"filters"`
-			} `json:"type_filters,omitempty"`
-			MiscFilters *struct {
-				Filters struct {
-					Corrupted *struct {
-						Option string `json:"option,omitempty"`
-					} `json:"corrupted,omitempty"`
-				} `json:"filters"`
-			} `json:"misc_filters,omitempty"`
-			EquipmentFilters *struct {
-				Filters struct {
-					AR *struct {
-						Min *int `json:"min,omitempty"`
-					} `json:"ar,omitempty"`
-					EV *struct {
-						Min *int `json:"min,omitempty"`
-					} `json:"ev,omitempty"`
-					ES *struct {
-						Min *int `json:"min,omitempty"`
-					} `json:"es,omitempty"`
-				} `json:"filters"`
-				Disabled bool `json:"disabled,omitempty"`
-			} `json:"equipment_filters,omitempty"`
-		} `json:"filters"`
-	} `json:"query"`
-	Sort struct {
-		Price string `json:"price"`
-	} `json:"sort"`
+    Query struct {
+        Status struct {
+            Option string `json:"option"`
+        } `json:"status"`
+        Stats   []StatGroup `json:"stats"`
+        Filters struct {
+            TypeFilters *struct {
+                Filters struct {
+                    Category *struct {
+                        Option string `json:"option,omitempty"`
+                    } `json:"category,omitempty"`
+                    Quality *struct {
+                        Min int `json:"min,omitempty"`
+                    } `json:"quality,omitempty"`
+                    ItemLevel *struct {
+                        Min int `json:"min,omitempty"`
+                        Max int `json:"max,omitempty"`
+                    } `json:"ilvl,omitempty"`
+                } `json:"filters"`
+            } `json:"type_filters,omitempty"`
+            MiscFilters *struct {
+                Filters struct {
+                    Corrupted *struct {
+                        Option string `json:"option,omitempty"`
+                    } `json:"corrupted,omitempty"`
+                } `json:"filters"`
+            } `json:"misc_filters,omitempty"`
+            EquipmentFilters *struct {
+                Filters struct {
+                    AR *struct {
+                        Min *int `json:"min,omitempty"`
+                    } `json:"ar,omitempty"`
+                    EV *struct {
+                        Min *int `json:"min,omitempty"`
+                    } `json:"ev,omitempty"`
+                    ES *struct {
+                        Min *int `json:"min,omitempty"`
+                    } `json:"es,omitempty"`
+                } `json:"filters"`
+                Disabled bool `json:"disabled,omitempty"`
+            } `json:"equipment_filters,omitempty"`
+            TradeFilters *struct {
+                Filters struct {
+                    Price *struct {
+                        Min    *float64 `json:"min,omitempty"`
+                        Max    *float64 `json:"max,omitempty"`
+                        Option string   `json:"option,omitempty"`
+                    } `json:"price,omitempty"`
+                } `json:"filters"`
+            } `json:"trade_filters,omitempty"`
+        } `json:"filters"`
+    } `json:"query"`
+    Sort struct {
+        Price string `json:"price"`
+    } `json:"sort"`
+}
+
+// ExecuteResearch copies item text, extracts only item type/category,
+// queries high-priced listings (>= 1 divine), and aggregates impactful stats.
+func (i *Input) ExecuteResearch() (map[string]interface{}, error) {
+    cfg := global.GetConfig()
+
+    if !i.detector.IsActive() {
+        return nil, fmt.Errorf("%s needs to be running", cfg.GameNameByAppID(i.detector.ActiveAppID()))
+    }
+
+    // Focus window and read clipboard item
+    window := i.detector.GetCurrentWindow()
+    if err := i.windowManager.FocusWindow(window); err != nil {
+        return nil, fmt.Errorf("failed to focus window: %w", err)
+    }
+    time.Sleep(100 * time.Millisecond)
+    robotgo.KeyTap("c", "ctrl")
+    time.Sleep(200 * time.Millisecond)
+
+    clipboardText, err := robotgo.ReadAll()
+    if err != nil {
+        return nil, fmt.Errorf("failed to read clipboard: %w", err)
+    }
+    if clipboardText == "" {
+        return nil, fmt.Errorf("no item text found in clipboard")
+    }
+
+    // Parse just to get ItemClass and League
+    statsmap.Load()
+    itemData, err := i.parseItemData(clipboardText)
+    if err != nil {
+        return nil, fmt.Errorf("failed to parse item data: %w", err)
+    }
+
+    category := i.mapItemClassToCategory(itemData.ItemClass)
+    if category == "" {
+        // Fall back to using base type name search if class unknown
+        i.log.Info("Unknown item class for research; proceeding without category filter", "item_class", itemData.ItemClass)
+    }
+    i.log.Info("Starting research aggregation",
+        "league", itemData.League,
+        "item_class", itemData.ItemClass,
+        "category", category,
+        "currency", "divine",
+    )
+
+    // Build research query (category + price >= 1 divine)
+    query := TradeQuery{}
+    query.Query.Status.Option = "securable"
+    query.Sort.Price = "asc"
+    query.Query.Stats = []StatGroup{}
+
+    if category != "" {
+        if query.Query.Filters.TypeFilters == nil {
+            query.Query.Filters.TypeFilters = &struct {
+                Filters struct {
+                    Category *struct {
+                        Option string `json:"option,omitempty"`
+                    } `json:"category,omitempty"`
+                    Quality *struct {
+                        Min int `json:"min,omitempty"`
+                    } `json:"quality,omitempty"`
+                    ItemLevel *struct {
+                        Min int `json:"min,omitempty"`
+                        Max int `json:"max,omitempty"`
+                    } `json:"ilvl,omitempty"`
+                } `json:"filters"`
+            }{}
+        }
+        query.Query.Filters.TypeFilters.Filters.Category = &struct {
+            Option string `json:"option,omitempty"`
+        }{Option: category}
+    }
+
+    // Trade filters: price >= 5 divine
+    if query.Query.Filters.TradeFilters == nil {
+        query.Query.Filters.TradeFilters = &struct {
+            Filters struct {
+                Price *struct {
+                    Min    *float64 `json:"min,omitempty"`
+                    Max    *float64 `json:"max,omitempty"`
+                    Option string   `json:"option,omitempty"`
+                } `json:"price,omitempty"`
+            } `json:"filters"`
+        }{}
+    }
+    min := 5.0
+    query.Query.Filters.TradeFilters.Filters.Price = &struct {
+        Min    *float64 `json:"min,omitempty"`
+        Max    *float64 `json:"max,omitempty"`
+        Option string   `json:"option,omitempty"`
+    }{Min: &min, Option: "divine"}
+
+    // Mirror -search behaviour: add equipment filters for AR/EV/ES to respect armour sub-types
+    if itemData.Armour != nil || itemData.Evasion != nil || itemData.EnergyShield != nil {
+        if query.Query.Filters.EquipmentFilters == nil {
+            query.Query.Filters.EquipmentFilters = &struct {
+                Filters struct {
+                    AR *struct {
+                        Min *int `json:"min,omitempty"`
+                    } `json:"ar,omitempty"`
+                    EV *struct {
+                        Min *int `json:"min,omitempty"`
+                    } `json:"ev,omitempty"`
+                    ES *struct {
+                        Min *int `json:"min,omitempty"`
+                    } `json:"es,omitempty"`
+                } `json:"filters"`
+                Disabled bool `json:"disabled,omitempty"`
+            }{}
+        }
+
+        // Use the same heuristic as -search: 10% below actual value
+        if itemData.Armour != nil {
+            minAR := int(float64(*itemData.Armour) * 0.9)
+            if minAR < 1 { minAR = 1 }
+            query.Query.Filters.EquipmentFilters.Filters.AR = &struct { Min *int `json:"min,omitempty"` }{Min: &minAR}
+            i.log.Debug("Research added armour filter", "original", *itemData.Armour, "min", minAR)
+        }
+        if itemData.Evasion != nil {
+            minEV := int(float64(*itemData.Evasion) * 0.9)
+            if minEV < 1 { minEV = 1 }
+            query.Query.Filters.EquipmentFilters.Filters.EV = &struct { Min *int `json:"min,omitempty"` }{Min: &minEV}
+            i.log.Debug("Research added evasion filter", "original", *itemData.Evasion, "min", minEV)
+        }
+        if itemData.EnergyShield != nil {
+            minES := int(float64(*itemData.EnergyShield) * 0.9)
+            if minES < 1 { minES = 1 }
+            query.Query.Filters.EquipmentFilters.Filters.ES = &struct { Min *int `json:"min,omitempty"` }{Min: &minES}
+            i.log.Debug("Research added energy shield filter", "original", *itemData.EnergyShield, "min", minES)
+        }
+    }
+
+    // Marshal and call API
+    queryJSON, err := json.Marshal(query)
+    if err != nil {
+        return nil, fmt.Errorf("failed to marshal research query: %w", err)
+    }
+    i.log.Debug("Built research query JSON", "bytes", len(queryJSON))
+    i.log.Debug("Research query JSON body", "json", string(queryJSON))
+
+    baseURL := "https://www.pathofexile.com"
+    searchURL := baseURL + "/api/trade2/search/poe2/" + url.PathEscape(itemData.League)
+    req, err := http.NewRequest("POST", searchURL, bytes.NewBuffer(queryJSON))
+    if err != nil {
+        return nil, fmt.Errorf("failed to create research search request: %w", err)
+    }
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Accept", "application/json")
+    req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+    poesessid := os.Getenv("POESESSID")
+    if poesessid == "" {
+        return nil, fmt.Errorf("POESESSID environment variable is not set")
+    }
+    req.Header.Set("Cookie", "POESESSID="+poesessid)
+
+    client := &http.Client{}
+    resp, err := client.Do(req)
+    if err != nil {
+        return nil, fmt.Errorf("failed to perform research search: %w", err)
+    }
+    defer resp.Body.Close()
+    body, _ := io.ReadAll(resp.Body)
+    if resp.StatusCode != 200 {
+        return nil, fmt.Errorf("API returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
+    }
+    // Log full search response body for debugging
+    i.log.Debug("Research search raw body", "status", resp.StatusCode, "body", string(body))
+
+    var searchResp struct {
+        ID     string   `json:"id"`
+        Result []string `json:"result"`
+        Total  int      `json:"total"`
+    }
+    if err := json.Unmarshal(body, &searchResp); err != nil {
+        return nil, fmt.Errorf("failed to unmarshal research search: %w", err)
+    }
+    i.log.Info("Research search response", "total", searchResp.Total, "returned_ids", len(searchResp.Result))
+
+    if len(searchResp.Result) == 0 {
+        return map[string]interface{}{
+            "league":             itemData.League,
+            "item_class":         itemData.ItemClass,
+            "category":           category,
+            "currency":           "divine",
+            "total_listings":     searchResp.Total,
+            "considered_listings": 0,
+            "stats":              []map[string]interface{}{},
+        }, nil
+    }
+
+    // Fetch in chunks and aggregate
+    // Extend TradeAPIResponse to include modifiers
+    type fetchItem struct {
+        Listing struct {
+            Price struct {
+                Amount   float64 `json:"amount"`
+                Currency string  `json:"currency"`
+            } `json:"price"`
+        } `json:"listing"`
+        Item struct {
+            Name        string   `json:"name"`
+            TypeLine    string   `json:"typeLine"`
+            BaseType    string   `json:"baseType"`
+            ItemLevel   int      `json:"ilvl"`
+            ExplicitMods []string `json:"explicitMods"`
+            ImplicitMods []string `json:"implicitMods"`
+            FracturedMods []string `json:"fracturedMods"`
+            EnchantMods []string `json:"enchantMods"`
+        } `json:"item"`
+    }
+    type fetchResp struct {
+        Result []fetchItem `json:"result"`
+    }
+
+    // Aggregation structure
+    type statAgg struct {
+        ID               string
+        Text             string
+        Count            int
+        Min              int
+        Max              int
+        Sum              float64
+        WeightedScore    float64
+        WeightedSumValue float64
+        TotalWeight      float64
+    }
+    aggs := map[string]*statAgg{}
+    type unmatchedStat struct {
+        Text          string
+        Count         int
+        WeightedScore float64
+    }
+    unmatched := map[string]*unmatchedStat{}
+
+    // Limit how many to fetch for performance
+    maxConsider := 30
+    if len(searchResp.Result) < maxConsider { maxConsider = len(searchResp.Result) }
+    considered := 0
+
+    for start := 0; start < maxConsider; start += 10 {
+        end := start + 10
+        if end > maxConsider { end = maxConsider }
+        i.log.Debug("Fetching result chunk", "start", start, "end", end)
+        ids := strings.Join(searchResp.Result[start:end], ",")
+        fURL := baseURL + "/api/trade2/fetch/" + ids + "?query=" + searchResp.ID
+        freq, err := http.NewRequest("GET", fURL, nil)
+        if err != nil { return nil, fmt.Errorf("failed to create research fetch: %w", err) }
+        freq.Header.Set("Cookie", "POESESSID="+poesessid)
+        freq.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        fresp, err := client.Do(freq)
+        if err != nil { return nil, fmt.Errorf("failed to fetch research results: %w", err) }
+        b, _ := io.ReadAll(fresp.Body)
+        fresp.Body.Close()
+        if fresp.StatusCode != 200 { return nil, fmt.Errorf("fetch non-200: %d body: %s", fresp.StatusCode, string(b)) }
+        // Log full fetch response body for this chunk
+        i.log.Debug("Research fetch raw body", "status", fresp.StatusCode, "body", string(b))
+
+        var fr fetchResp
+        if err := json.Unmarshal(b, &fr); err != nil {
+            return nil, fmt.Errorf("failed to unmarshal research fetch: %w", err)
+        }
+        for _, r := range fr.Result {
+            // Only consider divine-priced items (query enforces this)
+            w := r.Listing.Price.Amount
+            if w <= 0 { continue }
+            considered++
+            mods := []string{}
+            mods = append(mods, r.Item.ExplicitMods...)
+            mods = append(mods, r.Item.ImplicitMods...)
+            mods = append(mods, r.Item.FracturedMods...)
+            mods = append(mods, r.Item.EnchantMods...)
+            // Short per-item summary log (label, price, and top mods)
+            label := r.Item.TypeLine
+            if label == "" { label = r.Item.BaseType }
+            if label == "" { label = "Item" }
+            // Pick up to first three human-readable mods
+            highlights := []string{}
+            for mi := 0; mi < len(mods) && mi < 3; mi++ {
+                clean := regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(mods[mi], "")
+                clean = resolveBracketTokens(clean)
+                highlights = append(highlights, strings.TrimSpace(clean))
+            }
+            i.log.Info("Research item", "label", label, "price", fmt.Sprintf("%.2f", w), "currency", "divine", "ilvl", r.Item.ItemLevel, "mods", highlights)
+            // Pre-compile common fallback regexes (used only if external mapping misses)
+            fireRe := regexp.MustCompile(`(?i)\+?\d+(?:\.\d+)?% to Fire Resistance`)
+            coldRe := regexp.MustCompile(`(?i)\+?\d+(?:\.\d+)?% to Cold Resistance`)
+            lightRe := regexp.MustCompile(`(?i)\+?\d+(?:\.\d+)?% to Lightning Resistance`)
+            allSpellSkills1 := regexp.MustCompile(`(?i)\+?\d+(?:\.\d+)? to Level of all Spell Skills`)
+            allSpellSkills2 := regexp.MustCompile(`(?i)\+?\d+(?:\.\d+)? to Level of all Spell Skill Gems`)
+
+            for _, m := range mods {
+                if m == "" { continue }
+                // Clean mod text for better matcher compatibility
+                mClean := regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(m, "")
+                mClean = resolveBracketTokens(mClean)
+                matcher := normalizeToMatcher(mClean)
+                id, ok := statsmap.FindID(matcher)
+                if !ok || id == "" {
+                    // Fallback to known regex for core resistances if mapping misses
+                    if fireRe.MatchString(mClean) {
+                        id = "explicit.stat_3372524247" // Fire Resistance
+                        ok = true
+                        i.log.Debug("Fallback matched Fire Resistance", "text", mClean)
+                    } else if coldRe.MatchString(mClean) {
+                        id = "explicit.stat_4220027924" // Cold Resistance
+                        ok = true
+                        i.log.Debug("Fallback matched Cold Resistance", "text", mClean)
+                    } else if lightRe.MatchString(mClean) {
+                        id = "explicit.stat_1671376347" // Lightning Resistance
+                        ok = true
+                        i.log.Debug("Fallback matched Lightning Resistance", "text", mClean)
+                    } else if allSpellSkills1.MatchString(mClean) || allSpellSkills2.MatchString(mClean) {
+                        // +# to Level of all Spell Skills / Skill Gems
+                        id = "explicit.stat_124131830"
+                        ok = true
+                        i.log.Debug("Fallback matched +# to All Spell Skills", "text", mClean)
+                    }
+                }
+                if !ok || id == "" {
+                    // Track unmatched mods for debugging/visibility
+                    key := strings.Join(strings.Fields(mClean), " ")
+                    u := unmatched[key]
+                    if u == nil {
+                        u = &unmatchedStat{Text: key}
+                        unmatched[key] = u
+                    }
+                    u.Count++
+                    u.WeightedScore += w
+                    continue
+                }
+                // Log each matched mod mapped to a stat ID
+                i.log.Debug("Research matched mod", "text", mClean, "matcher", matcher, "id", id)
+
+                // Extract numeric value(s) from mod text
+                numberRegex := regexp.MustCompile(`[-+]?\d+(?:\.\d+)?`)
+                nums := numberRegex.FindAllString(mClean, -1)
+                val := 0.0
+                if len(nums) >= 1 {
+                    if iv, err := strconv.Atoi(nums[0]); err == nil {
+                        val = float64(iv)
+                    } else if f, err := strconv.ParseFloat(nums[0], 64); err == nil {
+                        val = f
+                    }
+                }
+
+                a, exists := aggs[id]
+                if !exists {
+                    a = &statAgg{ID: id, Text: mClean, Min: int(math.Round(val)), Max: int(math.Round(val))}
+                    aggs[id] = a
+                }
+                a.Count++
+                a.Sum += val
+                if int(math.Round(val)) < a.Min { a.Min = int(math.Round(val)) }
+                if int(math.Round(val)) > a.Max { a.Max = int(math.Round(val)) }
+                a.WeightedScore += w
+                a.WeightedSumValue += w * val
+                a.TotalWeight += w
+                // Preserve some readable text; keep first occurrence's text
+                if a.Text == "" { a.Text = mClean }
+            }
+        }
+    }
+
+    // Convert aggregation to slice and sort by WeightedScore desc
+    type outStat struct {
+        ID              string  `json:"id"`
+        Text            string  `json:"text"`
+        Count           int     `json:"count"`
+        Min             int     `json:"min"`
+        Max             int     `json:"max"`
+        Avg             float64 `json:"avg"`
+        WeightedScore   float64 `json:"weighted_score"`
+        WeightedAvg     float64 `json:"weighted_avg_value"`
+        CoveragePct     float64 `json:"coverage_pct"`
+    }
+    out := make([]outStat, 0, len(aggs))
+    for _, a := range aggs {
+        avg := 0.0
+        if a.Count > 0 { avg = a.Sum / float64(a.Count) }
+        wavg := 0.0
+        if a.TotalWeight > 0 { wavg = a.WeightedSumValue / a.TotalWeight }
+        coverage := 0.0
+        if considered > 0 { coverage = 100.0 * float64(a.Count) / float64(considered) }
+        out = append(out, outStat{
+            ID: a.ID, Text: a.Text, Count: a.Count, Min: a.Min, Max: a.Max,
+            Avg: avg, WeightedScore: a.WeightedScore, WeightedAvg: wavg, CoveragePct: coverage,
+        })
+    }
+    sort.Slice(out, func(i1, i2 int) bool { return out[i1].WeightedScore > out[i2].WeightedScore })
+
+    i.log.Info("Research aggregation complete",
+        "considered", considered,
+        "unique_stats", len(out),
+    )
+    // Log top N stats for visibility in the main process
+    topN := 10
+    if len(out) < topN { topN = len(out) }
+    for idx := 0; idx < topN; idx++ {
+        s := out[idx]
+        i.log.Info("Top research stat",
+            "rank", idx+1,
+            "id", s.ID,
+            "text", s.Text,
+            "weighted_score", fmt.Sprintf("%.2f", s.WeightedScore),
+            "coverage_pct", fmt.Sprintf("%.1f", s.CoveragePct),
+            "avg_value", fmt.Sprintf("%.1f", s.Avg),
+        )
+    }
+
+    // Convert to generic map for IPC (matched stats)
+    stats := make([]map[string]interface{}, 0, len(out))
+    for _, s := range out {
+        stats = append(stats, map[string]interface{}{
+            "id": s.ID,
+            "text": s.Text,
+            "count": s.Count,
+            "min": s.Min,
+            "max": s.Max,
+            "avg": s.Avg,
+            "weighted_score": s.WeightedScore,
+            "weighted_avg_value": s.WeightedAvg,
+            "coverage_pct": s.CoveragePct,
+        })
+    }
+
+    // Collect unmatched stats ordered by weighted score desc
+    type outUnmatched struct {
+        Text          string  `json:"text"`
+        Count         int     `json:"count"`
+        WeightedScore float64 `json:"weighted_score"`
+        CoveragePct   float64 `json:"coverage_pct"`
+    }
+    umList := make([]outUnmatched, 0, len(unmatched))
+    for _, u := range unmatched {
+        cov := 0.0
+        if considered > 0 { cov = 100.0 * float64(u.Count) / float64(considered) }
+        umList = append(umList, outUnmatched{Text: u.Text, Count: u.Count, WeightedScore: u.WeightedScore, CoveragePct: cov})
+    }
+    sort.Slice(umList, func(i, j int) bool { return umList[i].WeightedScore > umList[j].WeightedScore })
+    umOut := make([]map[string]interface{}, 0, len(umList))
+    for _, u := range umList {
+        umOut = append(umOut, map[string]interface{}{
+            "text": u.Text,
+            "count": u.Count,
+            "weighted_score": u.WeightedScore,
+            "coverage_pct": u.CoveragePct,
+        })
+    }
+
+    result := map[string]interface{}{
+        "league":             itemData.League,
+        "item_class":         itemData.ItemClass,
+        "category":           category,
+        "currency":           "divine",
+        "total_listings":     searchResp.Total,
+        "considered_listings": considered,
+        "stats":              stats,
+        "unmatched_stats":    umOut,
+    }
+
+    return result, nil
+}
+
+// resolveBracketTokens replaces tokens like "[Attack|Attacks]" with the last alternative (e.g., "Attacks")
+// and tokens like "[Projectile]" with "Projectile". This helps align API text with matcher strings.
+func resolveBracketTokens(s string) string {
+    re := regexp.MustCompile(`\[([^\]]+)\]`)
+    return re.ReplaceAllStringFunc(s, func(m string) string {
+        inner := m[1:len(m)-1]
+        parts := strings.Split(inner, "|")
+        for i := len(parts) - 1; i >= 0; i-- {
+            p := strings.TrimSpace(parts[i])
+            if p != "" {
+                return p
+            }
+        }
+        return ""
+    })
 }
 
 // parseItemData extracts comprehensive item information from tooltip text
@@ -1217,6 +1716,16 @@ func (i *Input) buildStatFilters(stats []ItemStat, category string) []StatFilter
                 i.log.Debug("Adjusted stat to global evasion rating for accessory", "from", "explicit.stat_2144192055", "to", filter.ID, "text", stat.Text)
             }
             // Keep local version for armor pieces (armour.* categories)
+        }
+
+        // Contextual fix for accuracy rating stats: use global for bows, local for other weapons
+        if filter.ID == "explicit.stat_691932474" { // "# to Accuracy Rating" (local version)
+            if strings.HasPrefix(category, "weapon.bow") {
+                // Use global accuracy rating stat for bows
+                filter.ID = "explicit.stat_803737631"
+                i.log.Debug("Adjusted stat to global accuracy rating for bow", "from", "explicit.stat_691932474", "to", filter.ID, "text", stat.Text)
+            }
+            // Keep local version for other weapon types
         }
 		
 		// Add value constraints based on the stat values with ±10% range
